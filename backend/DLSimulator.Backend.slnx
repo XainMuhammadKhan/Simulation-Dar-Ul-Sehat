@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="DLSimulator.API/DLSimulator.API.csproj" />
+  <Project Path="DLSimulator.Core/DLSimulator.Core.csproj" />
+</Solution>
