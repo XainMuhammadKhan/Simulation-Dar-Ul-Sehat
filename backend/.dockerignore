@@ -1,7 +1,10 @@
-**/bin
-**/obj
-**/.vs
-**/node_modules
-**/*.user
+node_modules
+**/bin/
+**/obj/
+.vscode
 .git
-.gitignore
+*.md
+npm-debug.log
+.DS_Store
+dist
+build
