@@ -31,11 +31,13 @@ export async function runDLQueueCalculation(frontendParams) {
     request.serviceMean = params.u;
     request.serviceVariance = params.sd ? params.sd * params.sd : undefined;
   }
-
+  console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
+  console.log("Request URL:", `${API_BASE}/api/queue/calculate`);
   const res = await fetch(`${API_BASE}/api/queue/calculate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request)
+
   });
 
   if (!res.ok) {

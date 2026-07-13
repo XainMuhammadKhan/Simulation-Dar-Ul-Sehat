@@ -9,3 +9,15 @@ C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospita
 C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospital)\backend\DLSimulator.Core\obj\Debug\net10.0\refint\DLSimulator.Core.dll
 C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospital)\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.pdb
 C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospital)\backend\DLSimulator.Core\obj\Debug\net10.0\ref\DLSimulator.Core.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\bin\Debug\net10.0\DLSimulator.Core.deps.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\bin\Debug\net10.0\DLSimulator.Core.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\bin\Debug\net10.0\DLSimulator.Core.pdb
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.AssemblyInfoInputs.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.AssemblyInfo.cs
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.csproj.CoreCompileInputs.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.sourcelink.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\refint\DLSimulator.Core.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\DLSimulator.Core.pdb
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.Core\obj\Debug\net10.0\ref\DLSimulator.Core.dll

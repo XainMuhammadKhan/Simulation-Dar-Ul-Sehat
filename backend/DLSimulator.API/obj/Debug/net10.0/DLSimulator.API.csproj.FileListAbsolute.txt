@@ -36,3 +36,42 @@ C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospita
 C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospital)\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.pdb
 C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospital)\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.genruntimeconfig.cache
 C:\Users\Xain Khan\Downloads\Group 9 Simulator Project (Mumtaz Emergency Hospital)\backend\DLSimulator.API\obj\Debug\net10.0\ref\DLSimulator.API.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\appsettings.Development.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\appsettings.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.API.staticwebassets.endpoints.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.API.exe
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.API.deps.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.API.runtimeconfig.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.API.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.API.pdb
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\Microsoft.AspNetCore.OpenApi.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\Microsoft.OpenApi.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\Swashbuckle.AspNetCore.Swagger.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerGen.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerUI.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.Core.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\bin\Debug\net10.0\DLSimulator.Core.pdb
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.csproj.AssemblyReference.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\rpswa.dswa.cache.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.AssemblyInfoInputs.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.AssemblyInfo.cs
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.csproj.CoreCompileInputs.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.MvcApplicationPartsAssemblyInfo.cs
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.MvcApplicationPartsAssemblyInfo.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.sourcelink.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\rjimswa.dswa.cache.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\rjsmrazor.dswa.cache.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\rjsmcshtml.dswa.cache.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\scopedcss\bundle\DLSimulator.API.styles.css
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\staticwebassets.build.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\staticwebassets.build.json.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\staticwebassets.development.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\staticwebassets.build.endpoints.json
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\swae.build.ex.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimula.33C5FBC5.Up2Date
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\refint\DLSimulator.API.dll
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.pdb
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\DLSimulator.API.genruntimeconfig.cache
+C:\Users\Xain Khan\Simulation-Dar-Ul-Sehat\backend\DLSimulator.API\obj\Debug\net10.0\ref\DLSimulator.API.dll

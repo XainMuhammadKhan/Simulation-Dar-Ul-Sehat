@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.API\\DLSimulator.API.csproj": {}
+    "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.API\\DLSimulator.API.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.API\\DLSimulator.API.csproj": {
+    "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.API\\DLSimulator.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.API\\DLSimulator.API.csproj",
+        "projectUniqueName": "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.API\\DLSimulator.API.csproj",
         "projectName": "DLSimulator.API",
-        "projectPath": "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.API\\DLSimulator.API.csproj",
+        "projectPath": "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.API\\DLSimulator.API.csproj",
         "packagesPath": "C:\\Users\\Xain Khan\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.API\\obj\\",
+        "outputPath": "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.API\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Xain Khan\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -26,8 +26,8 @@
           "net10.0": {
             "targetAlias": "net10.0",
             "projectReferences": {
-              "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj": {
-                "projectPath": "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj"
+              "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj": {
+                "projectPath": "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj"
               }
             }
           }
@@ -494,14 +494,14 @@
         }
       }
     },
-    "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj": {
+    "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj",
+        "projectUniqueName": "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj",
         "projectName": "DLSimulator.Core",
-        "projectPath": "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj",
+        "projectPath": "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.Core\\DLSimulator.Core.csproj",
         "packagesPath": "C:\\Users\\Xain Khan\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Xain Khan\\Downloads\\Group 9 Simulator Project (Mumtaz Emergency Hospital)\\backend\\DLSimulator.Core\\obj\\",
+        "outputPath": "C:\\Users\\Xain Khan\\Simulation-Dar-Ul-Sehat\\backend\\DLSimulator.Core\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Xain Khan\\AppData\\Roaming\\NuGet\\NuGet.Config"
