@@ -34,7 +34,7 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                     "http://localhost:3000",   // Next.js dev
                     "http://localhost:5173",   // Vite dev
-                    "https://dlsimulator.vercel.app"  // Update with your production URL
+                    "https://simulation-dar-ul-sehat.vercel.app"  // Update with your production URL
                 )
             .AllowAnyHeader()
             .AllowAnyMethod();
