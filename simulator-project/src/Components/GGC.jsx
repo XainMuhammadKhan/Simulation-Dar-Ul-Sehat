@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ExcelDataLoader from "./ExcelDataLoader";
 
 const GGC = () => {
   // State variables
@@ -21,6 +22,8 @@ const GGC = () => {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("form");
   const [showFormula, setShowFormula] = useState(false);
+  const [excelInputs, setExcelInputs] = useState(null);
+  const [dataSource, setDataSource] = useState("random");
 
   const factorial = (n) => {
     if (n === 0 || n === 1) return 1;
@@ -39,6 +42,16 @@ const GGC = () => {
     const denominator = sum + Math.pow(c * rho, c) / (factorial(c) * (1 - rho));
     return 1 / denominator;
   };
+
+  const buildInterArrivalTimes = (arrivalTimes) =>
+    arrivalTimes.map((time, index) => (index === 0 ? 0 : +(time - arrivalTimes[index - 1]).toFixed(2)));
+
+  const clearExcelData = () => {
+    setExcelInputs(null);
+    setDataSource("random");
+  };
+
+  const isExcelMode = dataSource === "excel";
 
   // Calculate Arrival parameters (mean and Ca²)
   const calculateArrivalParams = () => {
@@ -105,6 +118,8 @@ const GGC = () => {
       return;
     }
 
+    const usingExcel = Boolean(excelInputs);
+
     // Validate inputs based on distribution
     if (distribution === 'uniform') {
       // Check arrival limits
@@ -134,7 +149,7 @@ const GGC = () => {
     // Calculate arrival and service parameters
     const arrivalParams = calculateArrivalParams();
     const serviceParams = calculateServiceParams();
-    
+
     const arrivalRate = arrivalParams.arrivalRate;
     const serviceRate = serviceParams.serviceRate;
     const meanArrival = arrivalParams.meanArrival;
@@ -142,10 +157,21 @@ const GGC = () => {
     const ca2 = arrivalParams.ca2;
     const cs2 = serviceParams.cs2;
 
+    const arrivalTimes = usingExcel ? excelInputs.arrivalTimes : null;
+    const serviceTimes = usingExcel ? excelInputs.serviceTimes : null;
+    const priorities = usingExcel
+      ? excelInputs.priorities?.length && parseInt(servers, 10)
+        ? excelInputs.priorities
+        : Array(excelInputs.arrivalTimes.length).fill(1)
+      : null;
+
     setLoading(true);
     
     setTimeout(() => {
-      const rho = arrivalRate / (c * serviceRate);
+      const rho = usingExcel
+        ? serviceTimes.reduce((sum, value) => sum + value, 0) /
+          ((arrivalTimes[arrivalTimes.length - 1] || 1) + serviceTimes.reduce((sum, value) => sum + value, 0))
+        : arrivalRate / (c * serviceRate);
 
       if (rho >= 1) {
         alert(`Rho (${rho.toFixed(2)}) is greater than or equal to 1. System is unstable.`);
@@ -153,11 +179,15 @@ const GGC = () => {
         return;
       }
 
-      const Po = calculatePo(c, rho);
-      const LqMMC = (Po * Math.pow(arrivalRate / serviceRate, c) * rho) / (factorial(c) * Math.pow(1 - rho, 2));
-      const Lq = LqMMC * ((ca2 + cs2) / 2); // G/G/C formula
-      const L = Lq + arrivalRate / serviceRate;
-      const Wq = Lq / arrivalRate;
+      const Po = usingExcel ? null : calculatePo(c, rho);
+      const LqMMC = usingExcel
+        ? null
+        : (Po * Math.pow(arrivalRate / serviceRate, c) * rho) / (factorial(c) * Math.pow(1 - rho, 2));
+      const Lq = usingExcel
+        ? 0
+        : LqMMC * ((ca2 + cs2) / 2); // G/G/C formula
+      const L = usingExcel ? arrivalTimes.length : Lq + arrivalRate / serviceRate;
+      const Wq = usingExcel ? Lq / arrivalRate : Lq / arrivalRate;
       const W = Wq + meanService; // Mean service time
       const idle = 1 - rho;
 
@@ -202,6 +232,7 @@ const GGC = () => {
       setLoading(false);
       setTab("results");
       setShowFormula(false);
+      setDataSource(usingExcel ? "excel" : "random");
     }, 1500);
   };
 
@@ -225,6 +256,7 @@ const GGC = () => {
     setResults(null);
     setTab("form");
     setShowFormula(false);
+    clearExcelData();
   };
 
   // Results cards data - Exact same colors as MGC
@@ -398,6 +430,24 @@ const GGC = () => {
 
       {/* Empty div for 3rd column alignment */}
       <div></div>
+    </div>
+
+    <div className="mb-8">
+      <ExcelDataLoader onDataReady={setExcelInputs} />
+      {excelInputs && (
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white border border-gray-200 rounded-2xl px-5 py-4 shadow-sm">
+          <p className="text-sm text-[#2F575D] font-medium">
+            Excel data loaded. The next calculation will use the uploaded workbook.
+          </p>
+          <button
+            type="button"
+            onClick={clearExcelData}
+            className="self-start md:self-auto px-4 py-2 rounded-lg border border-[#2F575D] text-[#2F575D] font-semibold hover:bg-[#2F575D] hover:text-white transition-colors"
+          >
+            Clear Excel Data
+          </button>
+        </div>
+      )}
     </div>
 
     {/* Arrival Parameters Section */}
@@ -593,6 +643,9 @@ const GGC = () => {
                     <div className="text-2xl font-bold text-[#6D9197]">{results.arrivalRate}</div>
                   </div>
                 </div>
+                  <div className="text-center text-sm text-gray-500">
+                    Source: {isExcelMode ? "Uploaded Excel Data" : "Randomly Generated"}
+                  </div>
               </div>
 
               {/* Show/Hide Formula Button */}

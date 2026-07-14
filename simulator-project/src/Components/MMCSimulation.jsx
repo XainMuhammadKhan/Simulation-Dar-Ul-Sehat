@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import runDLQueueCalculation from "../api/simulation";
+import ExcelDataLoader from "./ExcelDataLoader";
+import { runQueueSimulation } from "../utils/queueEngine";
 import { Bar, Line, Pie } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -36,24 +37,22 @@ function factorial(n) {
 // Server utilization calculation function
 const calculateServerUtilization = (ganttChart, serverNumber) => {
   if (!ganttChart || ganttChart.length === 0) return "0.0";
-  
+
   // Filter segments for the specific server
   const serverSegments = ganttChart.filter(seg => seg.server === serverNumber);
-  
+
   if (serverSegments.length === 0) return "0.0";
-  
+
   const totalBusyTime = serverSegments
     .filter(seg => !seg.idle)
     .reduce((sum, seg) => sum + seg.dur, 0);
-  
+
   const makespan = Math.max(...serverSegments.map(seg => seg.end));
-  
+
   const utilization = (totalBusyTime / makespan) * 100;
-  
+
   return utilization.toFixed(1);
 };
-
-// Simulation is now handled by backend C# service; removed local implementation.
 
 function calculateSchedule(arr, serv, prio, numServers = 1) {
   const gantt = [];
@@ -79,7 +78,7 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
 
   while ((q.length > 0 || cust.some((c) => !c.completed)) && iterations < maxIterations) {
     iterations++;
-    
+
     // Add newly arrived customers to queue
     cust
       .filter((c) => c.arr <= t && !c.completed && !q.some((x) => x.id === c.id))
@@ -115,11 +114,11 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
       if (serverAvailableTime[s] <= t && !serverCurrentProcess[s] && q.length > 0) {
         // Find the highest priority process that can be assigned to this server
         let processIndex = -1;
-        
+
         // First, try to find a process with the same priority as currently running processes
         const currentPriorities = serverCurrentProcess.filter(p => p !== null).map(p => p.prio);
         const minCurrentPriority = currentPriorities.length > 0 ? Math.min(...currentPriorities) : Infinity;
-        
+
         // Try to find a process with the same priority as the lowest priority currently running
         for (let i = 0; i < q.length; i++) {
           if (q[i].prio <= minCurrentPriority) {
@@ -127,31 +126,31 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
             break;
           }
         }
-        
+
         // If no process with matching priority found, take the highest priority available
         if (processIndex === -1 && q.length > 0) {
           processIndex = 0;
         }
-        
+
         if (processIndex !== -1) {
           const c = q.splice(processIndex, 1)[0];
-          
+
           // If this is the first time this process is being served, record its start time
           if (c.startTime === null) {
             c.startTime = t;
           }
-          
+
           // Assign to server
           c.server = s + 1;
           serverCurrentProcess[s] = c;
-          
+
           // Calculate service duration
           const serve = c.rem;
-          
+
           // Update server availability and last end time
           serverAvailableTime[s] = t + serve;
           serverLastEndTime[s] = t + serve;
-          
+
           // Add to Gantt chart
           gantt.push({
             id: c.id,
@@ -163,7 +162,7 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
             preempted: false,
             idle: false
           });
-          
+
           // Mark customer as completed
           c.completed = true;
           c.rem = 0;
@@ -174,16 +173,16 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
     // If all servers are busy, find the next event time
     if (serverCurrentProcess.every(p => p !== null)) {
       // Find the next completion time
-      const nextCompletion = Math.min(...serverCurrentProcess.map((p, i) => 
+      const nextCompletion = Math.min(...serverCurrentProcess.map((p, i) =>
         p ? serverAvailableTime[i] : Infinity
       ));
-      
+
       // Find the next arrival time
       const nextArrival = cust.find((c) => !c.completed && c.arr > t)?.arr || Infinity;
-      
+
       // Move time to the next event
       t = Math.min(nextCompletion, nextArrival);
-      
+
       // Check if any process completed
       for (let s = 0; s < numServers; s++) {
         if (serverCurrentProcess[s] && serverAvailableTime[s] <= t) {
@@ -229,17 +228,17 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
 
   // Sort gantt by server and start time
   gantt.sort((a, b) => a.server - b.server || a.start - b.start);
-  
+
   return gantt;
 }
 
 function performanceMeasures(arr, serv, gantt, startTime, endingTime, waitingTime, turnAroundTime, server) {
   const first = {};
   const last = {};
-  
+
   // Filter out idle segments for performance calculation
   const processSegments = gantt.filter(seg => !seg.idle);
-  
+
   processSegments.forEach((s) => {
     if (!first[s.id]) first[s.id] = s.start;
     last[s.id] = s.end;
@@ -256,12 +255,98 @@ function performanceMeasures(arr, serv, gantt, startTime, endingTime, waitingTim
   });
 }
 
+// ===================== LOCAL SYNTHETIC DATA GENERATOR (no backend needed) =====================
+// Builds a full Poisson-arrival / exponential-service dataset, then runs it
+// through this file's own multi-server calculateSchedule — this is what
+// previously went to the (broken) backend endpoint.
+
+function generateCummulativeProbability(lambda, mu, priorityParams, numServers) {
+  let cp = 0, cplookup = 0, count = 0;
+  const cparray = [];
+  const cplookuparray = [];
+
+  while (cp <= 0.999999999999999) {
+    const calc = (Math.exp(-lambda) * Math.pow(lambda, count)) / factorial(count);
+    cplookup = cp;
+    cplookuparray[count] = cplookup;
+    cp = calc + cplookup;
+    cparray[count] = cp;
+    count++;
+    if (count > 500) break; // safety valve
+  }
+
+  const cpValues = [...cparray];
+  const cpLookup = [...cplookuparray];
+
+  const serviceTime = [];
+  for (let i = 0; i < cpLookup.length; i++) {
+    const st = Math.round(-mu * Math.log(Math.random()));
+    serviceTime.push(st < 1 ? 1 : st);
+  }
+
+  let priority;
+  if (priorityParams) {
+    priority = [];
+    for (let i = 0; i < cpLookup.length; i++) {
+      const r = Math.random();
+      priority.push(Math.round(priorityParams.a + r * (priorityParams.b - priorityParams.a)));
+    }
+  } else {
+    priority = Array(cpLookup.length).fill(1);
+  }
+
+  const inter = [0];
+  for (let i = 1; i < cpLookup.length; i++) {
+    const r = Math.random();
+    let found = false;
+    for (let j = 1; j < cpLookup.length; j++) {
+      if (cpLookup[j - 1] <= r && r < cpLookup[j]) {
+        inter.push(j);
+        found = true;
+        break;
+      }
+    }
+    if (!found) inter.push(0);
+  }
+
+  const arrivalTime = inter.reduce((a, c, i) => [...a, i === 0 ? 0 : a[i - 1] + c], []);
+  const interArrival = [...inter];
+  const avgTimeBetweenArrival = arrivalTime.map((_, i) => i);
+
+  const startTime = [], endingTime = [], waitingTime = [], turnAroundTime = [], server = [];
+  const gantt = calculateSchedule(arrivalTime, serviceTime, priority, numServers);
+  performanceMeasures(arrivalTime, serviceTime, gantt, startTime, endingTime, waitingTime, turnAroundTime, server);
+
+  const table = arrivalTime.map((at, i) => ({
+    serialNumber: i + 1,
+    cpLookup: cpLookup[i],
+    cp: cpValues[i],
+    avgTimeBetweenArrival: avgTimeBetweenArrival[i],
+    interArrival: interArrival[i],
+    arrivalTime: at,
+    priority: priority[i],
+    serviceTime: serviceTime[i],
+    startTime: startTime[i] || 0,
+    endTime: endingTime[i] || 0,
+    turnaroundTime: turnAroundTime[i] || 0,
+    waitTime: waitingTime[i] || 0,
+    responseTime: (startTime[i] || 0) - at,
+    server: `Server ${server[i] || 1}`
+  }));
+
+  const makespan = gantt.length > 0 ? Math.max(...gantt.map((g) => g.end)) : 1;
+  const totalService = serviceTime.reduce((a, b) => a + b, 0);
+  const utilization = +(((totalService / (makespan * numServers)) * 100).toFixed(1));
+
+  return { table, ganttChart: gantt, utilization };
+}
+
 function computeSummary(table, utilization, ganttChart = null) {
   if (!table || table.length === 0) return null;
-  
+
   // Helper function for average calculation
   const avg = (arr) => (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2);
-  
+
   // Calculate overall averages
   const overall = {
     utilization,
@@ -270,15 +355,15 @@ function computeSummary(table, utilization, ganttChart = null) {
     avgService: avg(table.map((t) => t.serviceTime || 0)),
     avgResponse: avg(table.map((t) => t.responseTime || 0))
   };
-  
+
   // Calculate priority-wise averages if priority is enabled
   let priorityWise = null;
-  
+
   // Check if there are multiple priorities
   const uniquePriorities = [...new Set(table.map(t => t.priority))];
   if (uniquePriorities.length > 1) {
     priorityWise = {};
-    
+
     uniquePriorities.forEach(priority => {
       const priorityTable = table.filter(t => t.priority === priority);
       if (priorityTable.length > 0) {
@@ -295,7 +380,7 @@ function computeSummary(table, utilization, ganttChart = null) {
       }
     });
   }
-  
+
   // Calculate priority distribution
   const priorityDistribution = {};
   uniquePriorities.forEach(priority => {
@@ -305,13 +390,13 @@ function computeSummary(table, utilization, ganttChart = null) {
       percentage: ((count / table.length) * 100).toFixed(1)
     };
   });
-  
+
   // Calculate server-wise performance for M/M/C
   let serverWise = null;
   if (ganttChart) {
     const uniqueServers = [...new Set(table.map(t => t.server))].sort();
     serverWise = {};
-    
+
     uniqueServers.forEach(server => {
       const serverTable = table.filter(t => t.server === server);
       if (serverTable.length > 0) {
@@ -326,7 +411,7 @@ function computeSummary(table, utilization, ganttChart = null) {
       }
     });
   }
-  
+
   return {
     ...overall,
     priorityWise,
@@ -341,7 +426,7 @@ function computeSummary(table, utilization, ganttChart = null) {
 // Helper function to calculate server distribution for each priority
 function calculateServerDistribution(ganttChart, priorityTable) {
   const serverCount = {};
-  
+
   priorityTable.forEach(customer => {
     // Find which server served this customer
     const serverSegment = ganttChart.find(seg => seg.id === customer.serialNumber - 1);
@@ -350,20 +435,20 @@ function calculateServerDistribution(ganttChart, priorityTable) {
       serverCount[server] = (serverCount[server] || 0) + 1;
     }
   });
-  
+
   // Convert to percentages
   const total = priorityTable.length;
   const distribution = {};
   Object.entries(serverCount).forEach(([server, count]) => {
     distribution[`server${server}`] = ((count / total) * 100).toFixed(1);
   });
-  
+
   return distribution;
 }
 
 // ===================== COMPONENT =====================
 
-export default function MM1() {
+export default function MMCSimulation() {
   const [lambda, setLambda] = useState(3.96);
   const [mu, setMu] = useState(5);
   const [pMin, setPMin] = useState(1);
@@ -374,83 +459,62 @@ export default function MM1() {
   const [chartType, setChartType] = useState("bar");
   const [metric, setMetric] = useState("waiting");
   const [summary, setSummary] = useState(null);
-
+  const [numServers, setNumServers] = useState(2);
+  const [excelData, setExcelData] = useState(null); // { arrivalTimes, serviceTimes, priorities }
+  const [dataSource, setDataSource] = useState("random"); // "random" | "excel" — reflects the *last run*
   const themeColors = ["#6D9197", "#2F575D", "#28363D"];
 
-  // Run simulation automatically when component mounts or parameters change
   useEffect(() => {
-    setTab("form")
-  }, []); // Empty dependency array
+    setTab("form");
+  }, []);
 
-const runSimulation = async () => {
-  try {
-    const data = await runDLQueueCalculation({ modelType: 'MM1', lambda, mu, numServers: 2 });
-    setResult(data);
-    setTab("table");
-    let s = null;
-    if (data.table && data.table.length > 0) {
-      s = computeSummary(data.table, data.utilization, data.ganttChart || data.ganttChart);
-    } else if (data.summary) {
-      const b = data.summary;
-      s = {
-        utilization: ((data.utilization ?? ((b.Rho ?? b.rho ?? 0) * 100)) || 0).toFixed ? Number(((data.utilization ?? ((b.Rho ?? b.rho ?? 0) * 100)) || 0).toFixed(2)) : (data.utilization ?? ((b.Rho ?? b.rho ?? 0) * 100)),
-        avgWait: b.Wq != null ? b.Wq.toFixed(2) : "-",
-        avgTAT: b.W != null ? b.W.toFixed(2) : "-",
-        avgService: b.Mu ? (1 / b.Mu).toFixed(2) : "-",
-        avgResponse: (b.W != null && b.Wq != null) ? (b.W - b.Wq).toFixed(2) : "-",
-        totalCustomers: b.Throughput ? Math.round(b.Throughput) : 0,
-        priorityDistribution: null,
-        priorityWise: null,
-        uniquePriorities: 1
-      };
+  const runSimulation = () => {
+    if (excelData) {
+      // ---- Run from uploaded Excel data ----
+      const priorities = prioOn
+        ? excelData.priorities
+        : Array(excelData.arrivalTimes.length).fill(1);
+      const data = runQueueSimulation(
+        excelData.arrivalTimes,
+        excelData.serviceTimes,
+        priorities,
+        numServers
+      );
+      setResult(data);
+      setDataSource("excel");
+      setTab("table");
+      setSummary(computeSummary(data.table, data.utilization, data.ganttChart));
+      return;
     }
-    setSummary(s);
-  } catch (err) {
-    console.error(err);
-    alert('Simulation failed: ' + err.message);
-  }
-};
+
+    // ---- Run from randomly generated data — fully local, no backend call ----
+    const data = generateCummulativeProbability(
+      lambda,
+      mu,
+      prioOn ? { a: pMin, b: pMax } : null,
+      numServers
+    );
+    setResult(data);
+    setDataSource("random");
+    setTab("table");
+    setSummary(computeSummary(data.table, data.utilization, data.ganttChart));
+  };
+
+  const clearExcelData = () => {
+    setExcelData(null);
+    setDataSource("random");
+  };
+
+  const isExcelMode = dataSource === "excel";
+
   const getPriorityGradient = (prio) => {
     if (prio === 1) return "bg-gradient-to-br from-[#6D9197] to-[#2F575D]";
     if (prio === 2) return "bg-gradient-to-br from-[#2F575D] to-[#28363D]";
     return "bg-gradient-to-br from-[#28363D] to-[#6D9197]";
   };
 
-  // for continuous x-axis ticks under gantt
-  const ganttAxisTicks = (gantt) => {
-    if (!gantt || gantt.length === 0) return [];
-    // collect unique starts and ends sorted
-    const ticks = [];
-    gantt.forEach((s) => {
-      if (!ticks.includes(s.start)) ticks.push(s.start);
-      if (!ticks.includes(s.end)) ticks.push(s.end);
-    });
-    ticks.sort((a, b) => a - b);
-    return ticks;
-  };
-
-  // Function to group Gantt chart data by server
-  const getGanttDataByServer = (ganttChart, serverCount) => {
-    const serverData = Array(serverCount).fill(null).map(() => []);
-    
-    ganttChart.forEach((item) => {
-      const serverIndex = item.server - 1;
-      if (serverIndex < serverCount) {
-        serverData[serverIndex].push(item);
-      }
-    });
-
-    // Sort each server's data by start time
-    serverData.forEach(server => {
-      server.sort((a, b) => a.start - b.start);
-    });
-    
-    return serverData;
-  };
-
   return (
     <div className="min-h-screen bg-[#f3f7f8]">
-    
 
       {/* TABS */}
       <nav className="bg-[#28363D] border-b shadow-sm w-full">
@@ -459,9 +523,8 @@ const runSimulation = async () => {
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${
-                tab === t ? "bg-[#6D9197] text-white" : "bg-[#28363D] text-gray-200 hover:bg-[#2F575D]"
-              } transition`}
+              className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${tab === t ? "bg-[#6D9197] text-white" : "bg-[#28363D] text-gray-200 hover:bg-[#2F575D]"
+                } transition`}
             >
               {t === "form" ? "Input Params" : t === "gantt" ? "Gantt" : t === "table" ? "Table" : t === "graphs" ? "Graphs" : "Calculations"}
             </button>
@@ -472,137 +535,183 @@ const runSimulation = async () => {
       <main>
         {/* =============== FORM =============== */}
         {tab === "form" && (
-          <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 max-w-7xl mx-auto border border-gray-100">
-            
-            {/* Main Title */}
-            <h2 className="text-4xl font-extrabold text-center mb-10 text-[#2F575D] tracking-tight">
-              M/M/C Priority Queue — Simulation Setup
-            </h2>
-
-            {/* FULL HORIZONTAL LAYOUT */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
-              {/* Left Side: Lambda, Mu, Priority Toggle */}
-              <div className="lg:col-span-7 space-y-8">
-
-                {/* Row 1: Lambda & Mu */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="group">
-                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
-                      Arrival Rate (λ)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={lambda}
-                      onChange={(e) => setLambda(+e.target.value)}
-                      className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                               border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
-                               transition-all duration-300 shadow-inner"
-                      placeholder="3.96"
-                    />
-                    <p className="mt-2 text-xs text-gray-600 text-center font-medium">Customers arriving per unit time</p>
-                  </div>
-
-                  <div className="group">
-                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
-                      Service Rate (μ)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={mu}
-                      onChange={(e) => setMu(+e.target.value)}
-                      className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                               border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20 
-                               transition-all duration-300 shadow-inner"
-                      placeholder="5.00"
-                    />
-                    <p className="mt-2 text-xs text-gray-600 text-center font-medium">Customers served per unit time</p>
-                  </div>
+          <div className="max-w-7xl mx-auto">
+            {/* ---- Excel upload block ---- */}
+            <div className="mt-8">
+              <ExcelDataLoader onDataReady={setExcelData} />
+              {excelData && (
+                <div className="max-w-2xl mx-auto -mt-4 mb-6 flex items-center justify-between bg-[#6D9197]/10 border border-[#6D9197]/40 rounded-xl px-6 py-3">
+                  <span className="text-sm font-semibold text-[#2F575D]">
+                    Excel data loaded — {excelData.arrivalTimes.length} customers. Running the
+                    simulation will use this data instead of the fields below.
+                  </span>
+                  <button
+                    onClick={clearExcelData}
+                    className="ml-4 text-sm font-bold text-red-600 hover:text-red-800 whitespace-nowrap"
+                  >
+                    Clear & use random ✕
+                  </button>
                 </div>
+              )}
+            </div>
 
-                {/* Row 2: Priority Toggle */}
-                <div className="bg-gradient-to-r from-[#6D9197]/10 to-[#2F575D]/10 rounded-3xl p-8 border border-[#6D9197]/20">
-                  <label className="flex items-center justify-center gap-6 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={prioOn}
-                      onChange={(e) => setPrioOn(e.target.checked)}
-                      className="w-12 h-12 rounded-2xl accent-[#6D9197] focus:ring-8 focus:ring-[#6D9197]/30 
-                               transition-all duration-300 hover:scale-110"
-                    />
-                    <div className="text-center">
-                      <div className="text-3xl font-black text-[#28363D]">
-                        {prioOn ? "Priority Queue: ENABLED" : "Priority Queue: DISABLED"}
-                      </div>
-                      <p className="mt-2 text-sm text-gray-700 font-medium">
-                        Lower number = Higher priority · Preemptive scheduling
+            <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 border border-gray-100 mb-8">
+
+              {/* Main Title */}
+              <h2 className="text-4xl font-extrabold text-center mb-10 text-[#2F575D] tracking-tight">
+                M/M/C Priority Queue — Simulation Setup
+              </h2>
+
+              {/* FULL HORIZONTAL LAYOUT */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+                {/* Left Side: Lambda, Mu, Priority Toggle */}
+                <div className="lg:col-span-7 space-y-8">
+                  {/* Row 1: Lambda & Mu */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="group">
+                      <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                        Arrival Rate (λ)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={lambda}
+                        onChange={(e) => setLambda(+e.target.value)}
+                        className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
+                             border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
+                             transition-all duration-300 shadow-inner"
+                        placeholder="3.96"
+                      />
+                      <p className="mt-2 text-xs text-gray-600 text-center font-medium">
+                        Customers arriving per unit time
                       </p>
                     </div>
-                  </label>
-                </div>
 
-              </div>
-
-              {/* Right Side: Priority Range + Run Button */}
-              <div className="lg:col-span-5 space-y-8">
-
-                {/* Priority Range Box */}
-                {prioOn && (
-                  <div className="bg-[#28363D]/5 border-2 border-dashed border-[#28363D]/30 rounded-3xl p-8">
-                    <h3 className="text-2xl font-bold text-center text-[#2F575D] mb-6">Priority Levels</h3>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="text-center">
-                        <label className="block text-sm font-bold text-green-700 uppercase mb-3">
-                          Highest Priority
-                        </label>
-                        <input
-                          type="number"
-                          value={pMin}
-                          onChange={(e) => setPMin(+e.target.value)}
-                          className="w-full px-6 py-5 text-3xl font-black text-center bg-green-50 border-4 border-green-600 
-                                   rounded-2xl focus:ring-8 focus:ring-green-300 transition-all"
-                          min="1"
-                        />
-                        <p className="mt-2 text-xs text-green-800 font-bold">Lowest Number</p>
-                      </div>
-                      <div className="text-center">
-                        <label className="block text-sm font-bold text-red-700 uppercase mb-3">
-                          Lowest Priority
-                        </label>
-                        <input
-                          type="number"
-                          value={pMax}
-                          onChange={(e) => setPMax(+e.target.value)}
-                          className="w-full px-6 py-5 text-3xl font-black text-center bg-red-50 border-4 border-red-600 
-                                   rounded-2xl focus:ring-8 focus:ring-red-300 transition-all"
-                          min={pMin || 1}
-                        />
-                        <p className="mt-2 text-xs text-red-800 font-bold">Highest Number</p>
-                      </div>
+                    <div className="group">
+                      <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                        Service Rate (μ)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={mu}
+                        onChange={(e) => setMu(+e.target.value)}
+                        className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
+                             border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20 
+                             transition-all duration-300 shadow-inner"
+                        placeholder="5.00"
+                      />
+                      <p className="mt-2 text-xs text-gray-600 text-center font-medium">Customers served per unit time</p>
                     </div>
                   </div>
-                )}
 
-                {/* Run Button - Full Height */}
-                <div className="flex items-center justify-center h-full min-h-48">
-                  <button
-                    onClick={runSimulation}
-                    className="group relative w-full max-w-xl px-10 py-10 text-4xl font-extrabold text-white 
+                  {/* Row 1b: Number of Servers */}
+                  <div className="group">
+                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                      Number of Servers (c)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={numServers}
+                      onChange={(e) => setNumServers(Math.max(1, +e.target.value))}
+                      className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
+                           border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
+                           transition-all duration-300 shadow-inner"
+                    />
+                    <p className="mt-2 text-xs text-gray-600 text-center font-medium">How many servers/desks are open</p>
+                  </div>
+
+                  {/* Row 2: Priority Toggle */}
+                  <div className="bg-gradient-to-r from-[#6D9197]/10 to-[#2F575D]/10 rounded-3xl p-8 border border-[#6D9197]/20">
+                    <label className="flex items-center justify-center gap-6 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={prioOn}
+                        onChange={(e) => setPrioOn(e.target.checked)}
+                        className="w-12 h-12 rounded-2xl accent-[#6D9197] focus:ring-8 focus:ring-[#6D9197]/30 
+                             transition-all duration-300 hover:scale-110"
+                      />
+                      <div className="text-center">
+                        <div className="text-3xl font-black text-[#28363D]">
+                          {prioOn ? "Priority Queue: ENABLED" : "Priority Queue: DISABLED"}
+                        </div>
+                        <p className="mt-2 text-sm text-gray-700 font-medium">
+                          Lower number = Higher priority · Preemptive scheduling
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Right Side: Priority Range + Run Button */}
+                <div className="lg:col-span-5 space-y-8">
+
+                  {/* Priority Range Box */}
+                  {prioOn && (
+                    <div className="bg-[#28363D]/5 border-2 border-dashed border-[#28363D]/30 rounded-3xl p-8">
+                      <h3 className="text-2xl font-bold text-center text-[#2F575D] mb-6">Priority Levels</h3>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="text-center">
+                          <label className="block text-sm font-bold text-green-700 uppercase mb-3">
+                            Highest Priority
+                          </label>
+                          <input
+                            type="number"
+                            value={pMin}
+                            onChange={(e) => setPMin(+e.target.value)}
+                            className="w-full px-6 py-5 text-3xl font-black text-center bg-green-50 border-4 border-green-600 
+                                   rounded-2xl focus:ring-8 focus:ring-green-300 transition-all"
+                            min="1"
+                          />
+                          <p className="mt-2 text-xs text-green-800 font-bold">Lowest Number</p>
+                        </div>
+                        <div className="text-center">
+                          <label className="block text-sm font-bold text-red-700 uppercase mb-3">
+                            Lowest Priority
+                          </label>
+                          <input
+                            type="number"
+                            value={pMax}
+                            onChange={(e) => setPMax(+e.target.value)}
+                            className="w-full px-6 py-5 text-3xl font-black text-center bg-red-50 border-4 border-red-600 
+                                   rounded-2xl focus:ring-8 focus:ring-red-300 transition-all"
+                            min={pMin || 1}
+                          />
+                          <p className="mt-2 text-xs text-red-800 font-bold">Highest Number</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Run Button - Full Height */}
+                  <div className="flex items-center justify-center h-full min-h-48">
+                    <div className="w-full max-w-xl">
+                      <button
+                        onClick={runSimulation}
+                        className="group relative w-full px-10 py-10 text-4xl font-extrabold text-white 
                              bg-gradient-to-r from-[#6D9197] via-[#2F575D] to-[#28363D] 
                              rounded-3xl shadow-2xl hover:shadow-[#6D9197]/60 
                              transform hover:scale-105 active:scale-95 transition-all duration-500 
                              overflow-hidden"
-                  >
-                    <span className="relative z-10 drop-shadow-2xl">RUN SIMULATION</span>
-                    <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197] 
+                      >
+                        <span className="relative z-10 drop-shadow-2xl">RUN SIMULATION</span>
+                        <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197] 
                                   opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-                    <div className="absolute -inset-2 bg-gradient-to-r from-[#6D9197] to-[#2F575D] 
+                        <div className="absolute -inset-2 bg-gradient-to-r from-[#6D9197] to-[#2F575D] 
                                   blur-2xl opacity-30 group-hover:opacity-70 transition-opacity"></div>
-                  </button>
-                </div>
+                      </button>
+                      <p className="mt-4 text-center text-sm font-semibold text-[#2F575D]">
+                        {excelData
+                          ? "Will run using the uploaded Excel data."
+                          : "Will run using the parameters above (randomly generated)."}
+                      </p>
+                    </div>
+                  </div>
 
+                </div>
               </div>
             </div>
           </div>
@@ -615,115 +724,61 @@ const runSimulation = async () => {
               Gantt Chart
             </h2>
 
-            {/* Server 1 */}
-            <div className="mb-12">
-              <h3 className="text-xl font-bold text-center mb-6 text-[#2F575D] bg-[#6D9197] text-white py-3 rounded-lg">
-                Server 1
-              </h3>
-              
-              <div className="flex gap-6 items-end justify-start min-w-max py-6 bg-gray-50 rounded-xl px-4">
-                {result.ganttChart
-                  .filter(seg => seg.server === 1)
-                  .map((seg, i) => {
-                    const server1Segments = result.ganttChart.filter(s => s.server === 1);
-                    const makespan = server1Segments.length > 0 ? 
-                      Math.max(...server1Segments.map(s => s.end)) : 1;
-                    const widthPercent = Math.max((seg.dur / makespan) * 100, 6);
-                    
-                    return (
-                      <div key={i} className="relative text-center" style={{ minWidth: `${widthPercent * 2}px` }}>
-                        {seg.preempted && (
-                          <div className="absolute left-1/2 -translate-x-1/2 -top-12 animate-pulse scale-105">
-                            <span className="bg-[#28363D] text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg ring-2 ring-[#2F575D] ring-opacity-70">
-                              PREEMPTED!
-                            </span>
-                          </div>
-                        )}
+            {Array.from({ length: numServers }, (_, serverIndex) => {
+              const serverNum = serverIndex + 1;
+              const segments = result.ganttChart.filter(seg => seg.server === serverNum);
+              const makespan = segments.length > 0 ? Math.max(...segments.map(s => s.end)) : 1;
 
-                        <div
-                          className={`rounded-xl text-white font-bold flex flex-col items-center justify-center shadow-md transition-all ${
-                            seg.idle 
-                              ? "bg-gray-400 border-2 border-dashed border-gray-500" 
-                              : getPriorityGradient(seg.prio)
-                          } ${seg.preempted ? "animate-pulse ring-2 ring-[#2F575D] ring-opacity-70 scale-105" : "hover:scale-105 hover:shadow-lg"}`}
-                          style={{ width: Math.max(widthPercent * 3, 80), height: 96 }}
-                        >
-                          <div className="text-2xl font-black">
-                            {seg.idle ? "IDLE" : `P${seg.id + 1}`}
-                          </div>
-                          {!seg.idle && (
-                            <>
-                              <div className="text-xs opacity-90 mt-1">Prio: {seg.prio}</div>
-                              <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">{seg.dur}</div>
-                            </>
+              return (
+                <div key={serverNum} className="mb-12">
+                  <h3 className="text-xl font-bold text-center mb-6 text-white bg-[#6D9197] py-3 rounded-lg">
+                    Server {serverNum}
+                  </h3>
+
+                  <div className="flex gap-6 items-end justify-start min-w-max py-6 bg-gray-50 rounded-xl px-4">
+                    {segments.map((seg, i) => {
+                      const widthPercent = Math.max((seg.dur / makespan) * 100, 6);
+
+                      return (
+                        <div key={i} className="relative text-center" style={{ minWidth: `${widthPercent * 2}px` }}>
+                          {seg.preempted && (
+                            <div className="absolute left-1/2 -translate-x-1/2 -top-12 animate-pulse scale-105">
+                              <span className="bg-[#28363D] text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg ring-2 ring-[#2F575D] ring-opacity-70">
+                                PREEMPTED!
+                              </span>
+                            </div>
                           )}
-                        </div>
 
-                        <div className="mt-4">
-                          <div className="text-sm text-[#2F575D] font-semibold">{seg.start}</div>
-                          <div className="w-1 h-8 bg-gray-300 mx-auto my-1"></div>
-                          <div className="text-sm text-[#28363D] font-semibold">{seg.end}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {/* Server 2 */}
-            <div className="mb-12">
-              <h3 className="text-xl font-bold text-center mb-6 text-[#2F575D] bg-[#2F575D] text-white py-3 rounded-lg">
-                Server 2
-              </h3>
-              
-              <div className="flex gap-6 items-end justify-start min-w-max py-6 bg-gray-50 rounded-xl px-4">
-                {result.ganttChart
-                  .filter(seg => seg.server === 2)
-                  .map((seg, i) => {
-                    const server2Segments = result.ganttChart.filter(s => s.server === 2);
-                    const makespan = server2Segments.length > 0 ? 
-                      Math.max(...server2Segments.map(s => s.end)) : 1;
-                    const widthPercent = Math.max((seg.dur / makespan) * 100, 6);
-                    
-                    return (
-                      <div key={i} className="relative text-center" style={{ minWidth: `${widthPercent * 2}px` }}>
-                        {seg.preempted && (
-                          <div className="absolute left-1/2 -translate-x-1/2 -top-12 animate-pulse scale-105">
-                            <span className="bg-[#28363D] text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg ring-2 ring-[#2F575D] ring-opacity-70">
-                              PREEMPTED!
-                            </span>
-                          </div>
-                        )}
-
-                        <div
-                          className={`rounded-xl text-white font-bold flex flex-col items-center justify-center shadow-md transition-all ${
-                            seg.idle 
-                              ? "bg-gray-400 border-2 border-dashed border-gray-500" 
+                          <div
+                            className={`rounded-xl text-white font-bold flex flex-col items-center justify-center shadow-md transition-all ${seg.idle
+                              ? "bg-gray-400 border-2 border-dashed border-gray-500"
                               : getPriorityGradient(seg.prio)
-                          } ${seg.preempted ? "animate-pulse ring-2 ring-[#2F575D] ring-opacity-70 scale-105" : "hover:scale-105 hover:shadow-lg"}`}
-                          style={{ width: Math.max(widthPercent * 3, 80), height: 96 }}
-                        >
-                          <div className="text-2xl font-black">
-                            {seg.idle ? "IDLE" : `P${seg.id + 1}`}
+                              } ${seg.preempted ? "animate-pulse ring-2 ring-[#2F575D] ring-opacity-70 scale-105" : "hover:scale-105 hover:shadow-lg"}`}
+                            style={{ width: Math.max(widthPercent * 3, 80), height: 96 }}
+                          >
+                            <div className="text-2xl font-black">
+                              {seg.idle ? "IDLE" : `P${seg.id + 1}`}
+                            </div>
+                            {!seg.idle && (
+                              <>
+                                <div className="text-xs opacity-90 mt-1">Prio: {seg.prio}</div>
+                                <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">{seg.dur}</div>
+                              </>
+                            )}
                           </div>
-                          {!seg.idle && (
-                            <>
-                              <div className="text-xs opacity-90 mt-1">Prio: {seg.prio}</div>
-                              <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">{seg.dur}</div>
-                            </>
-                          )}
-                        </div>
 
-                        <div className="mt-4">
-                          <div className="text-sm text-[#2F575D] font-semibold">{seg.start}</div>
-                          <div className="w-1 h-8 bg-gray-300 mx-auto my-1"></div>
-                          <div className="text-sm text-[#28363D] font-semibold">{seg.end}</div>
+                          <div className="mt-4">
+                            <div className="text-sm text-[#2F575D] font-semibold">{seg.start}</div>
+                            <div className="w-1 h-8 bg-gray-300 mx-auto my-1"></div>
+                            <div className="text-sm text-[#28363D] font-semibold">{seg.end}</div>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
 
             {/* Legend */}
             <div className="mt-8 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
@@ -762,9 +817,24 @@ const runSimulation = async () => {
         {/* =============== TABLE =============== */}
         {tab === "table" && result && result.table && result.table.length > 0 ? (
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden my-8 border w-full max-w-8xl mx-auto">
-            <div className="bg-[#2F575D] text-white p-6">
+            <div className="bg-[#2F575D] text-white p-6 flex items-center justify-between">
               <h2 className="text-3xl font-bold">Results Table</h2>
+              <span
+                className={`text-sm font-bold px-4 py-2 rounded-full ${
+                  isExcelMode ? "bg-yellow-400 text-[#28363D]" : "bg-[#6D9197] text-white"
+                }`}
+              >
+                {isExcelMode ? "Source: Uploaded Excel Data" : "Source: Randomly Generated"}
+              </span>
             </div>
+
+            {isExcelMode && (
+              <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 text-sm text-yellow-900">
+                <strong>Note:</strong> Cp Lookup, Cp, and Avg Time Between Arrival are not applicable
+                for this run — this is real observed data, not randomly generated, so those columns
+                are hidden below.
+              </div>
+            )}
 
             <div className="overflow-x-auto w-full">
               <table className="w-full text-center table-auto text-lg">
@@ -772,9 +842,7 @@ const runSimulation = async () => {
                   <tr>
                     {[
                       "Serial Number",
-                      "Cp Lookup",
-                      "Cp",
-                      "Avg Time Between Arrival",
+                      ...(isExcelMode ? [] : ["Cp Lookup", "Cp", "Avg Time Between Arrival"]),
                       "Inter Arrival",
                       "Arrival Time",
                       "Priority",
@@ -803,17 +871,20 @@ const runSimulation = async () => {
                       className="border-b hover:bg-[#6D9197]/20 transition text-lg"
                     >
                       <td className="py-3 px-3 font-bold text-lg text-[#2F575D]">{r.serialNumber}</td>
-                      <td className="py-3 px-3">{r.cpLookup.toFixed(6)}</td>
-                      <td className="py-3 px-3">{r.cp.toFixed(6)}</td>
-                      <td className="py-3 px-3">{r.avgTimeBetweenArrival}</td>
+                      {!isExcelMode && (
+                        <>
+                          <td className="py-3 px-3">{r.cpLookup.toFixed(6)}</td>
+                          <td className="py-3 px-3">{r.cp.toFixed(6)}</td>
+                          <td className="py-3 px-3">{r.avgTimeBetweenArrival}</td>
+                        </>
+                      )}
                       <td className="py-3 px-3">{r.interArrival}</td>
                       <td className="py-3 px-3">{r.arrivalTime}</td>
                       <td className="py-3 px-3">
-                        <span className={`px-3 py-1 rounded-full text-white font-bold ${
-                          r.priority === 1 ? 'bg-[#6D9197]' : 
-                          r.priority === 2 ? 'bg-[#2F575D]' : 
-                          'bg-[#28363D]'
-                        }`}>
+                        <span className={`px-3 py-1 rounded-full text-white font-bold ${r.priority === 1 ? 'bg-[#6D9197]' :
+                          r.priority === 2 ? 'bg-[#2F575D]' :
+                            'bg-[#28363D]'
+                          }`}>
                           {r.priority}
                         </span>
                       </td>
@@ -833,7 +904,7 @@ const runSimulation = async () => {
         ) : tab === "table" && result ? (
           <div className="bg-white rounded-xl shadow-2xl my-8 p-8 border max-w-4xl mx-auto text-center">
             <h3 className="text-xl font-semibold">Per-customer table not available</h3>
-            <p className="text-sm text-gray-600 mt-2">Backend returned summary-only results. See the "Calculations" tab for queue metrics (L, W, Lq, Wq, ρ).</p>
+            <p className="text-sm text-gray-600 mt-2">See the "Calculations" tab for queue metrics (L, W, Lq, Wq, ρ).</p>
           </div>
         ) : null}
 
@@ -891,11 +962,10 @@ const runSimulation = async () => {
                     } else if (metric === "tat") {
                       dataForMetric = result.table.map((r) => parseFloat(r.turnaroundTime.toFixed(2)));
                     } else if (metric === "endTime") {
-                      // Y-axis boxes according to ending time
                       dataForMetric = result.table.map((r) => parseFloat(r.endTime.toFixed(2)));
                     }
 
-                    const maxVal = Math.max(...dataForMetric) + 2; // padding top
+                    const maxVal = Math.max(...dataForMetric) + 2;
 
                     const dataset = {
                       labels,
@@ -923,9 +993,9 @@ const runSimulation = async () => {
                           },
                           title: {
                             display: true,
-                            text: metric === "endTime" ? "End Time" : 
-                                  metric === "waiting" ? "Waiting Time" :
-                                  metric === "response" ? "Response Time" :
+                            text: metric === "endTime" ? "End Time" :
+                              metric === "waiting" ? "Waiting Time" :
+                                metric === "response" ? "Response Time" :
                                   "Turnaround Time",
                             font: {
                               size: 16,
@@ -944,21 +1014,21 @@ const runSimulation = async () => {
                     };
 
                     return chartType === "bar" ? <Bar data={dataset} options={options} /> :
-                           chartType === "line" ? <Line data={dataset} options={options} /> :
-                           <Pie
-                             data={{
-                               labels,
-                               datasets: [
-                                 {
-                                   data: dataForMetric,
-                                   backgroundColor: result.table.map((r) =>
-                                     r.priority === 1 ? themeColors[0] : r.priority === 2 ? themeColors[1] : themeColors[2]
-                                   )
-                                 }
-                               ]
-                             }}
-                             options={{ responsive: true }}
-                           />;
+                      chartType === "line" ? <Line data={dataset} options={options} /> :
+                        <Pie
+                          data={{
+                            labels,
+                            datasets: [
+                              {
+                                data: dataForMetric,
+                                backgroundColor: result.table.map((r) =>
+                                  r.priority === 1 ? themeColors[0] : r.priority === 2 ? themeColors[1] : themeColors[2]
+                                )
+                              }
+                            ]
+                          }}
+                          options={{ responsive: true }}
+                        />;
                   })()}
                 </div>
               </div>
@@ -971,214 +1041,206 @@ const runSimulation = async () => {
           </div>
         ) : null}
 
-{tab === "calc" && summary && result && (
-  <div className="p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto my-10">
-    <h2 className="text-3xl font-bold text-center mb-8 text-[#2F575D]">Performance Calculations</h2>
+        {tab === "calc" && summary && result && (
+          <div className="p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto my-10">
+            <h2 className="text-3xl font-bold text-center mb-8 text-[#2F575D]">Performance Calculations</h2>
 
-    {/* Server Utilization Cards - M/M/C */}
-    <div className="mb-12">
-      <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Server Utilization</h3>
-      <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
-        <div className="p-8 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#2F575D] text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-2xl font-semibold">Server 1 Utilization</h3>
-              <div className="text-5xl font-black mt-4">{calculateServerUtilization(result.ganttChart, 1)}%</div>
-              <p className="mt-2 text-lg opacity-90">Percentage of time Server 1 is busy</p>
+            {/* Server Utilization Cards - M/M/C */}
+            <div className="mb-12">
+              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Server Utilization</h3>
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+                {Array.from({ length: numServers }, (_, idx) => idx + 1).map((serverNum, i) => (
+                  <div
+                    key={serverNum}
+                    className={`p-8 rounded-2xl text-white shadow-lg ${
+                      i % 2 === 0
+                        ? "bg-gradient-to-br from-[#6D9197] to-[#2F575D]"
+                        : "bg-gradient-to-br from-[#2F575D] to-[#28363D]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-2xl font-semibold">Server {serverNum} Utilization</h3>
+                        <div className="text-5xl font-black mt-4">{calculateServerUtilization(result.ganttChart, serverNum)}%</div>
+                        <p className="mt-2 text-lg opacity-90">Percentage of time Server {serverNum} is busy</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-3xl font-bold">{summary.totalCustomers}</div>
+                        <p className="text-lg">Total Customers</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold">{summary.totalCustomers}</div>
-              <p className="text-lg">Total Customers</p>
-            </div>
-          </div>
-        </div>
 
-        <div className="p-8 rounded-2xl bg-gradient-to-br from-[#2F575D] to-[#28363D] text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-2xl font-semibold">Server 2 Utilization</h3>
-              <div className="text-5xl font-black mt-4">{calculateServerUtilization(result.ganttChart, 2)}%</div>
-              <p className="mt-2 text-lg opacity-90">Percentage of time Server 2 is busy</p>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold">{summary.totalCustomers}</div>
-              <p className="text-lg">Total Customers</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            {/* Overall Performance Metrics - M/M/C */}
+            <div className="mb-12">
+              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Overall Performance Metrics</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2F575D] to-[#28363D] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Waiting Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgWait}</div>
+                  <p className="mt-2 text-sm opacity-90">Average wait time</p>
+                </div>
 
-    {/* Overall Performance Metrics - M/M/C */}
-    <div className="mb-12">
-      <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Overall Performance Metrics</h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2F575D] to-[#28363D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Waiting Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgWait}</div>
-          <p className="mt-2 text-sm opacity-90">Average wait time</p>
-        </div>
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#28363D] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Turnaround Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgTAT}</div>
+                  <p className="mt-2 text-sm opacity-90">Average completion time</p>
+                </div>
 
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#28363D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Turnaround Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgTAT}</div>
-          <p className="mt-2 text-sm opacity-90">Average completion time</p>
-        </div>
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#2F575D] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Service Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgService}</div>
+                  <p className="mt-2 text-sm opacity-90">Average service time</p>
+                </div>
 
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#2F575D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Service Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgService}</div>
-          <p className="mt-2 text-sm opacity-90">Average service time</p>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#2F575D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Response Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgResponse}</div>
-          <p className="mt-2 text-sm opacity-90">Average response time</p>
-        </div>
-      </div>
-    </div>
-
-    {/* Priority Distribution - M/M/C */}
-    {summary.priorityWise && (
-      <div className="mb-12">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-[#2F575D]">Priority Distribution</h3>
-          <div className="text-lg font-semibold text-[#2F575D]">
-            Total: {summary.totalCustomers} Customers | {summary.uniquePriorities} Priority Levels
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
-            <div key={priorityKey} className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#6D9197] text-white shadow-lg">
-              <div className="flex flex-col items-center">
-                <h3 className="text-xl font-semibold mb-2">{priorityKey.replace('priority', 'Priority ')}</h3>
-                <div className="text-3xl font-black">{data.count}</div>
-                <div className="text-lg mt-1">Customers</div>
-                <div className="text-xl font-bold mt-2 bg-white text-[#28363D] px-3 py-1 rounded-full">
-                  {data.percentage}%
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#2F575D] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Response Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgResponse}</div>
+                  <p className="mt-2 text-sm opacity-90">Average response time</p>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-    )}
 
-    {/* Priority-wise Performance Table - M/M/C */}
-    {summary.priorityWise && (
-      <div className="mb-12">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-[#2F575D]">Priority-wise Performance</h3>
-          <div className="text-lg font-semibold text-[#2F575D]">
-            {summary.uniqueServers} Servers | M/M/C Queue
-          </div>
-        </div>
-        
-        <div className="overflow-x-auto bg-white rounded-xl shadow-lg">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white">
-              <tr>
-                <th className="py-5 px-6 text-left text-xl">Priority Level</th>
-                <th className="py-5 px-6 text-center text-xl">Customers</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Wait Time</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Turnaround Time</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Service Time</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Response Time</th>
-                <th className="py-5 px-6 text-center text-xl">% of Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
-                <tr key={priorityKey} className="border-b hover:bg-gray-50 transition">
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${
-                        priorityKey === 'priority1' ? 'bg-[#6D9197]' : 
-                        priorityKey === 'priority2' ? 'bg-[#2F575D]' : 
-                        'bg-[#28363D]'
-                      }`}>
-                        {priorityKey.replace('priority', '')}
-                      </span>
-                      <span className="text-lg font-semibold">
-                        {priorityKey === 'priority1' ? 'High Priority' : 
-                         priorityKey === 'priority2' ? 'Medium Priority' : 
-                         'Low Priority'}
+            {/* Priority Distribution - M/M/C */}
+            {summary.priorityWise && (
+              <div className="mb-12">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold text-[#2F575D]">Priority Distribution</h3>
+                  <div className="text-lg font-semibold text-[#2F575D]">
+                    Total: {summary.totalCustomers} Customers | {summary.uniquePriorities} Priority Levels
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
+                    <div key={priorityKey} className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#6D9197] text-white shadow-lg">
+                      <div className="flex flex-col items-center">
+                        <h3 className="text-xl font-semibold mb-2">{priorityKey.replace('priority', 'Priority ')}</h3>
+                        <div className="text-3xl font-black">{data.count}</div>
+                        <div className="text-lg mt-1">Customers</div>
+                        <div className="text-xl font-bold mt-2 bg-white text-[#28363D] px-3 py-1 rounded-full">
+                          {data.percentage}%
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Priority-wise Performance Table - M/M/C */}
+            {summary.priorityWise && (
+              <div className="mb-12">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold text-[#2F575D]">Priority-wise Performance</h3>
+                  <div className="text-lg font-semibold text-[#2F575D]">
+                    {summary.uniqueServers} Servers | M/M/C Queue
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto bg-white rounded-xl shadow-lg">
+                  <table className="w-full">
+                    <thead className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white">
+                      <tr>
+                        <th className="py-5 px-6 text-left text-xl">Priority Level</th>
+                        <th className="py-5 px-6 text-center text-xl">Customers</th>
+                        <th className="py-5 px-6 text-center text-xl">Avg Wait Time</th>
+                        <th className="py-5 px-6 text-center text-xl">Avg Turnaround Time</th>
+                        <th className="py-5 px-6 text-center text-xl">Avg Service Time</th>
+                        <th className="py-5 px-6 text-center text-xl">Avg Response Time</th>
+                        <th className="py-5 px-6 text-center text-xl">% of Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
+                        <tr key={priorityKey} className="border-b hover:bg-gray-50 transition">
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${priorityKey === 'priority1' ? 'bg-[#6D9197]' :
+                                priorityKey === 'priority2' ? 'bg-[#2F575D]' :
+                                  'bg-[#28363D]'
+                                }`}>
+                                {priorityKey.replace('priority', '')}
+                              </span>
+                              <span className="text-lg font-semibold">
+                                {priorityKey === 'priority1' ? 'High Priority' :
+                                  priorityKey === 'priority2' ? 'Medium Priority' :
+                                    'Low Priority'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="text-2xl font-bold">{data.count}</div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="text-2xl font-bold text-[#6D9197]">{data.avgWait}</div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="text-2xl font-bold text-[#2F575D]">{data.avgTAT}</div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="text-2xl font-bold text-[#28363D]">{data.avgService}</div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="text-2xl font-bold text-[#6D9197]">{data.avgResponse}</div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="text-2xl font-bold">{data.percentage}%</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Performance Insights - M/M/C */}
+            <div className="mt-12">
+              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Performance Insights</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#6D9197] shadow">
+                  <h4 className="text-xl font-bold text-[#2F575D] mb-4">System Efficiency</h4>
+                  <div className="space-y-4">
+                    {Array.from({ length: numServers }, (_, idx) => idx + 1).map((serverNum) => (
+                      <div key={serverNum} className="flex justify-between items-center">
+                        <span className="text-lg">Server {serverNum} Utilization:</span>
+                        <span className="text-2xl font-bold text-[#6D9197]">{calculateServerUtilization(result.ganttChart, serverNum)}%</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg">Avg Customer Throughput:</span>
+                      <span className="text-2xl font-bold text-[#28363D]">
+                        {((summary.totalCustomers / (result?.table[result.table.length - 1]?.endTime || 1)).toFixed(2))}
                       </span>
                     </div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold">{data.count}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#6D9197]">{data.avgWait}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#2F575D]">{data.avgTAT}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#28363D]">{data.avgService}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#6D9197]">{data.avgResponse}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold">{data.percentage}%</div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )}
+                  </div>
+                </div>
 
-    {/* Performance Insights - M/M/C */}
-    <div className="mt-12">
-      <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Performance Insights</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#6D9197] shadow">
-          <h4 className="text-xl font-bold text-[#2F575D] mb-4">System Efficiency</h4>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Server 1 Utilization:</span>
-              <span className="text-2xl font-bold text-[#6D9197]">{calculateServerUtilization(result.ganttChart, 1)}%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Server 2 Utilization:</span>
-              <span className="text-2xl font-bold text-[#2F575D]">{calculateServerUtilization(result.ganttChart, 2)}%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Avg Customer Throughput:</span>
-              <span className="text-2xl font-bold text-[#28363D]">
-                {((summary.totalCustomers / (result?.table[result.table.length - 1]?.endTime || 1)).toFixed(2))}
-              </span>
+                <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#2F575D] shadow">
+                  <h4 className="text-xl font-bold text-[#2F575D] mb-4">Priority Analysis</h4>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg">Priority Levels:</span>
+                      <span className="text-2xl font-bold text-[#28363D]">{summary.uniquePriorities}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg">Total Processes:</span>
+                      <span className="text-2xl font-bold text-[#6D9197]">{summary.totalCustomers}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg">Number of Servers:</span>
+                      <span className="text-2xl font-bold text-[#2F575D]">{summary.uniqueServers}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#2F575D] shadow">
-          <h4 className="text-xl font-bold text-[#2F575D] mb-4">Priority Analysis</h4>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Priority Levels:</span>
-              <span className="text-2xl font-bold text-[#28363D]">{summary.uniquePriorities}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Total Processes:</span>
-              <span className="text-2xl font-bold text-[#6D9197]">{summary.totalCustomers}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Number of Servers:</span>
-              <span className="text-2xl font-bold text-[#2F575D]">{summary.uniqueServers}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+        )}
 
 
       </main>

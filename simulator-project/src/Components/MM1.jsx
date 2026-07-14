@@ -12,6 +12,8 @@ import {
   LineElement,
   ArcElement
 } from "chart.js";
+import ExcelDataLoader from "./ExcelDataLoader";
+import { runQueueSimulation } from "../utils/queueEngine";
 
 ChartJS.register(
   CategoryScale,
@@ -290,19 +292,49 @@ export default function MM1() {
   const [metric, setMetric] = useState("waiting");
   const [summary, setSummary] = useState(null);
 
+  // ---- Excel mode state ----
+  const [excelInputs, setExcelInputs] = useState(null); // { arrivalTimes, serviceTimes, priorities } | null
+  const [dataSource, setDataSource] = useState("random"); // "random" | "excel" — reflects the *last run*, not just the upload
+
   const themeColors = ["#6D9197", "#2F575D", "#28363D"];
 
   const runSim = () => {
-    const data = generateCummulativeProbability(
-      lambda,
-      mu,
-      prioOn ? { a: pMin, b: pMax } : null
-    );
-    setResult(data);
-    setTab("table");
-    const s = computeSummary(data.table, data.utilization);
-    setSummary(s);
+    if (excelInputs) {
+      // ---- Run from uploaded Excel data ----
+      const priorities = prioOn
+        ? excelInputs.priorities
+        : Array(excelInputs.arrivalTimes.length).fill(1);
+      const data = runQueueSimulation(
+        excelInputs.arrivalTimes,
+        excelInputs.serviceTimes,
+        priorities,
+        1 // M/M/1 → single server
+      );
+      setResult(data);
+      setDataSource("excel");
+      setTab("table");
+      const s = computeSummary(data.table, data.utilization);
+      setSummary(s);
+    } else {
+      // ---- Run from randomly generated data (unchanged) ----
+      const data = generateCummulativeProbability(
+        lambda,
+        mu,
+        prioOn ? { a: pMin, b: pMax } : null
+      );
+      setResult(data);
+      setDataSource("random");
+      setTab("table");
+      const s = computeSummary(data.table, data.utilization);
+      setSummary(s);
+    }
   };
+
+  const clearExcelData = () => {
+    setExcelInputs(null);
+  };
+
+  const isExcelMode = dataSource === "excel";
 
   const getPriorityGradient = (prio) => {
     if (prio === 1) return "bg-gradient-to-br from-[#6D9197] to-[#2F575D]";
@@ -313,159 +345,182 @@ export default function MM1() {
   return (
     <div className="min-h-screen bg-[#f3f7f8]">
       {/* TABS */}
-      <nav className="bg-[#28363D] border-b shadow-sm w-full">
-        <div className="flex w-full">
-          {["form", "gantt", "table", "graphs", "calc"].map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${
-                tab === t
-                  ? "bg-[#6D9197] text-white"
-                  : "bg-[#28363D] text-gray-200 hover:bg-[#2F575D]"
-              } transition`}
-            >
-              {t === "form"
-                ? "Input Params"
-                : t === "gantt"
-                ? "Gantt"
-                : t === "table"
-                ? "Table"
-                : t === "graphs"
-                ? "Graphs"
-                : "Calculations"}
-            </button>
-          ))}
-        </div>
-      </nav>
+        <nav className="bg-[#28363D] border-b shadow-sm w-full">
+          <div className="flex w-full">
+            {['form', 'gantt', 'table', 'graphs', 'calc'].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${
+                  tab === t ? "bg-[#6D9197] text-white" : "bg-[#28363D] text-gray-200 hover:bg-[#2F575D]"
+                } transition`}
+              >
+                {t === "form" ? "Input Params" : t === "gantt" ? "Gantt" : t === "table" ? "Table" : t === "graphs" ? "Graphs" : "Calculations"}
+              </button>
+            ))}
+          </div>
+        </nav>
 
       <main>
         {/* =============== FORM =============== */}
         {tab === "form" && (
-          <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 max-w-6xl mx-auto border border-gray-100 my-8">
-            <h2 className="text-4xl font-extrabold text-center mb-10 text-[#2F575D] tracking-tight">
-              M/M/1 Priority Queue — Simulation Setup
-            </h2>
+          <div className="max-w-6xl mx-auto">
+            {/* ---- Excel upload block ---- */}
+            <div className="mt-8">
+              <ExcelDataLoader onDataReady={setExcelInputs} />
+              {excelInputs && (
+                <div className="max-w-2xl mx-auto -mt-4 mb-6 flex items-center justify-between bg-[#6D9197]/10 border border-[#6D9197]/40 rounded-xl px-6 py-3">
+                  <span className="text-sm font-semibold text-[#2F575D]">
+                    Excel data loaded — {excelInputs.arrivalTimes.length} customers. Running the
+                    simulation will use this data instead of the fields below.
+                  </span>
+                  <button
+                    onClick={clearExcelData}
+                    className="ml-4 text-sm font-bold text-red-600 hover:text-red-800 whitespace-nowrap"
+                  >
+                    Clear & use random ✕
+                  </button>
+                </div>
+              )}
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              {/* Left Side */}
-              <div className="lg:col-span-7 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="group">
-                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
-                      Arrival Rate (λ)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={lambda}
-                      onChange={(e) => setLambda(+e.target.value)}
-                      className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100
+            <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 border border-gray-100 mb-8">
+              <h2 className="text-4xl font-extrabold text-center mb-10 text-[#2F575D] tracking-tight">
+                M/M/1 Priority Queue — Simulation Setup
+              </h2>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* Left Side */}
+                {!excelInputs && (
+                  <div className="lg:col-span-7 space-y-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="group">
+                        <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                          Arrival Rate (λ)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={lambda}
+                          onChange={(e) => setLambda(+e.target.value)}
+                          className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100
                                border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20
                                transition-all duration-300 shadow-inner"
-                      placeholder="3.96"
-                    />
-                    <p className="mt-2 text-xs text-gray-600 text-center font-medium">
-                      Customers arriving per unit time
-                    </p>
-                  </div>
+                          placeholder="3.96"
+                        />
+                        <p className="mt-2 text-xs text-gray-600 text-center font-medium">
+                          Customers arriving per unit time
+                        </p>
+                      </div>
 
-                  <div className="group">
-                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
-                      Service Rate (μ)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={mu}
-                      onChange={(e) => setMu(+e.target.value)}
-                      className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100
+                      <div className="group">
+                        <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                          Service Rate (μ)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={mu}
+                          onChange={(e) => setMu(+e.target.value)}
+                          className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100
                                border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20
                                transition-all duration-300 shadow-inner"
-                      placeholder="5.00"
-                    />
-                    <p className="mt-2 text-xs text-gray-600 text-center font-medium">
-                      Customers served per unit time
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-[#6D9197]/10 to-[#2F575D]/10 rounded-3xl p-8 border border-[#6D9197]/20">
-                  <label className="flex items-center justify-center gap-6 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={prioOn}
-                      onChange={(e) => setPrioOn(e.target.checked)}
-                      className="w-12 h-12 rounded-2xl accent-[#6D9197] focus:ring-8 focus:ring-[#6D9197]/30
-                               transition-all duration-300 hover:scale-110"
-                    />
-                    <div className="text-center">
-                      <div className="text-3xl font-black text-[#28363D]">
-                        {prioOn ? "Priority Queue: ENABLED" : "Priority Queue: DISABLED"}
-                      </div>
-                      <p className="mt-2 text-sm text-gray-700 font-medium">
-                        Lower number = Higher priority · Preemptive scheduling
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Right Side */}
-              <div className="lg:col-span-5 space-y-8">
-                {prioOn && (
-                  <div className="bg-[#28363D]/5 border-2 border-dashed border-[#28363D]/30 rounded-3xl p-8">
-                    <h3 className="text-2xl font-bold text-center text-[#2F575D] mb-6">
-                      Priority Levels
-                    </h3>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="text-center">
-                        <label className="block text-sm font-bold text-green-700 uppercase mb-3">
-                          Highest Priority
-                        </label>
-                        <input
-                          type="number"
-                          value={pMin}
-                          onChange={(e) => setPMin(+e.target.value)}
-                          className="w-full px-6 py-5 text-3xl font-black text-center bg-green-50 border-4 border-green-600
-                                   rounded-2xl focus:ring-8 focus:ring-green-300 transition-all"
-                          min="1"
+                          placeholder="5.00"
                         />
-                        <p className="mt-2 text-xs text-green-800 font-bold">Lowest Number</p>
-                      </div>
-                      <div className="text-center">
-                        <label className="block text-sm font-bold text-red-700 uppercase mb-3">
-                          Lowest Priority
-                        </label>
-                        <input
-                          type="number"
-                          value={pMax}
-                          onChange={(e) => setPMax(+e.target.value)}
-                          className="w-full px-6 py-5 text-3xl font-black text-center bg-red-50 border-4 border-red-600
-                                   rounded-2xl focus:ring-8 focus:ring-red-300 transition-all"
-                          min={pMin || 1}
-                        />
-                        <p className="mt-2 text-xs text-red-800 font-bold">Highest Number</p>
+                        <p className="mt-2 text-xs text-gray-600 text-center font-medium">
+                          Customers served per unit time
+                        </p>
                       </div>
                     </div>
                   </div>
                 )}
 
-                <div className="flex items-center justify-center h-full min-h-48">
-                  <button
-                    onClick={runSim}
-                    className="group relative w-full max-w-xl px-10 py-10 text-4xl font-extrabold text-white
+                <div className="lg:col-span-7 space-y-8 lg:col-start-1 lg:row-start-2">
+                  <div className="bg-gradient-to-r from-[#6D9197]/10 to-[#2F575D]/10 rounded-3xl p-8 border border-[#6D9197]/20">
+                    <label className="flex items-center justify-center gap-6 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={prioOn}
+                        onChange={(e) => setPrioOn(e.target.checked)}
+                        className="w-12 h-12 rounded-2xl accent-[#6D9197] focus:ring-8 focus:ring-[#6D9197]/30
+                               transition-all duration-300 hover:scale-110"
+                      />
+                      <div className="text-center">
+                        <div className="text-3xl font-black text-[#28363D]">
+                          {prioOn ? "Priority Queue: ENABLED" : "Priority Queue: DISABLED"}
+                        </div>
+                        <p className="mt-2 text-sm text-gray-700 font-medium">
+                          Lower number = Higher priority · Preemptive scheduling
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Right Side */}
+                <div className={`${excelInputs ? "lg:col-span-12" : "lg:col-span-5"} space-y-8`}>
+                  {prioOn && (
+                    <div className="bg-[#28363D]/5 border-2 border-dashed border-[#28363D]/30 rounded-3xl p-8">
+                      <h3 className="text-2xl font-bold text-center text-[#2F575D] mb-6">
+                        Priority Levels
+                      </h3>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="text-center">
+                          <label className="block text-sm font-bold text-green-700 uppercase mb-3">
+                            Highest Priority
+                          </label>
+                          <input
+                            type="number"
+                            value={pMin}
+                            onChange={(e) => setPMin(+e.target.value)}
+                            className="w-full px-6 py-5 text-3xl font-black text-center bg-green-50 border-4 border-green-600
+                                   rounded-2xl focus:ring-8 focus:ring-green-300 transition-all"
+                            min="1"
+                          />
+                          <p className="mt-2 text-xs text-green-800 font-bold">Lowest Number</p>
+                        </div>
+                        <div className="text-center">
+                          <label className="block text-sm font-bold text-red-700 uppercase mb-3">
+                            Lowest Priority
+                          </label>
+                          <input
+                            type="number"
+                            value={pMax}
+                            onChange={(e) => setPMax(+e.target.value)}
+                            className="w-full px-6 py-5 text-3xl font-black text-center bg-red-50 border-4 border-red-600
+                                   rounded-2xl focus:ring-8 focus:ring-red-300 transition-all"
+                            min={pMin || 1}
+                          />
+                          <p className="mt-2 text-xs text-red-800 font-bold">Highest Number</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-center h-full min-h-48">
+                    <div className="w-full max-w-xl">
+                      <button
+                        onClick={runSim}
+                        disabled={false}
+                        className="group relative w-full px-10 py-10 text-4xl font-extrabold text-white
                              bg-gradient-to-r from-[#6D9197] via-[#2F575D] to-[#28363D]
                              rounded-3xl shadow-2xl hover:shadow-[#6D9197]/60
                              transform hover:scale-105 active:scale-95 transition-all duration-500
                              overflow-hidden"
-                  >
-                    <span className="relative z-10 drop-shadow-2xl">RUN SIMULATION</span>
-                    <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197]
+                      >
+                        <span className="relative z-10 drop-shadow-2xl">RUN SIMULATION</span>
+                        <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197]
                                   opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-                    <div className="absolute -inset-2 bg-gradient-to-r from-[#6D9197] to-[#2F575D]
+                        <div className="absolute -inset-2 bg-gradient-to-r from-[#6D9197] to-[#2F575D]
                                   blur-2xl opacity-30 group-hover:opacity-70 transition-opacity"></div>
-                  </button>
+                      </button>
+                      <p className="mt-4 text-center text-sm font-semibold text-[#2F575D]">
+                        {excelInputs
+                          ? "Will run using the uploaded Excel data."
+                          : "Will run using the parameters above (randomly generated)."}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -563,9 +618,24 @@ export default function MM1() {
         {/* =============== TABLE =============== */}
         {tab === "table" && result && (
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden my-8 border w-full max-w-8xl mx-auto">
-            <div className="bg-[#2F575D] text-white p-6">
+            <div className="bg-[#2F575D] text-white p-6 flex items-center justify-between">
               <h2 className="text-3xl font-bold">Results Table</h2>
+              <span
+                className={`text-sm font-bold px-4 py-2 rounded-full ${
+                  isExcelMode ? "bg-yellow-400 text-[#28363D]" : "bg-[#6D9197] text-white"
+                }`}
+              >
+                {isExcelMode ? "Source: Uploaded Excel Data" : "Source: Randomly Generated"}
+              </span>
             </div>
+
+            {isExcelMode && (
+              <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 text-sm text-yellow-900">
+                <strong>Note:</strong> Cp Lookup, Cp, and Avg Time Between Arrival are not applicable
+                for this run — this is real observed data, not randomly generated, so those columns
+                are hidden below.
+              </div>
+            )}
 
             <div className="overflow-x-auto w-full">
               <table className="w-full text-center table-auto text-lg">
@@ -573,9 +643,7 @@ export default function MM1() {
                   <tr>
                     {[
                       "Serial Number",
-                      "Cp Lookup",
-                      "Cp",
-                      "Avg Time Between Arrival",
+                      ...(isExcelMode ? [] : ["Cp Lookup", "Cp", "Avg Time Between Arrival"]),
                       "Inter Arrival",
                       "Arrival Time",
                       "Priority",
@@ -597,9 +665,13 @@ export default function MM1() {
                   {result.table.map((r, i) => (
                     <tr key={i} className="border-b hover:bg-[#6D9197]/20 transition text-lg">
                       <td className="py-3 px-3 font-bold text-lg text-[#2F575D]">{r.serialNumber}</td>
-                      <td className="py-3 px-3">{r.cpLookup.toFixed(15)}</td>
-                      <td className="py-3 px-3">{r.cp.toFixed(15)}</td>
-                      <td className="py-3 px-3">{r.avgTimeBetweenArrival}</td>
+                      {!isExcelMode && (
+                        <>
+                          <td className="py-3 px-3">{r.cpLookup.toFixed(15)}</td>
+                          <td className="py-3 px-3">{r.cp.toFixed(15)}</td>
+                          <td className="py-3 px-3">{r.avgTimeBetweenArrival}</td>
+                        </>
+                      )}
                       <td className="py-3 px-3">{r.interArrival}</td>
                       <td className="py-3 px-3">{r.arrivalTime}</td>
                       <td className="py-3 px-3">
@@ -789,7 +861,6 @@ export default function MM1() {
                   <div>
                     <h3 className="text-2xl font-semibold">Server 1 Utilization</h3>
                     <div className="text-5xl font-black mt-4">{summary.utilization}%</div>
-                    <p className="mt-2 text-lg opacity-90">Percentage of time server is busy</p>
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold">{summary.totalCustomers}</div>

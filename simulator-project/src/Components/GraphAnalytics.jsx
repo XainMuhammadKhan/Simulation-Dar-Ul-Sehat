@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Bar, Line, Pie } from "react-chartjs-2";
+import ExcelDataLoader from "./ExcelDataLoader";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -362,6 +363,12 @@ const getGanttDataByServer = (ganttChart, serverCount) => {
   return serverData;
 };
 
+const buildInterArrivalTimes = (arrivalTimes) =>
+  arrivalTimes.map((time, index) => {
+    if (index === 0) return 0;
+    return +(time - arrivalTimes[index - 1]).toFixed(2);
+  });
+
 // ===================== COMPONENT =====================
 
 export default function GGC() {
@@ -393,6 +400,8 @@ export default function GGC() {
   const [pMin, setPMin] = useState(1);
   const [pMax, setPMax] = useState(3);
   const [prioOn, setPrioOn] = useState(true);
+  const [excelInputs, setExcelInputs] = useState(null);
+  const [dataSource, setDataSource] = useState("random");
 
   const [result, setResult] = useState(null);
   const [tab, setTab] = useState("form");
@@ -406,27 +415,46 @@ export default function GGC() {
     setTab("form");
   }, []);
 
+  const clearExcelData = () => {
+    setExcelInputs(null);
+    setDataSource("random");
+  };
+
+  const isExcelMode = dataSource === "excel";
+
   const runSimulation = () => {
     try {
-      const inputData =
-        inputType === "customerCount" ? { count: customerCount } : timeRange;
+      const usingExcel = Boolean(excelInputs);
 
-      const { arrivalTimes, interArrivalTimes } = generateArrivalTimes(
+      const randomInputs = generateArrivalTimes(
         inputType,
-        inputData,
+        inputType === "customerCount" ? { count: customerCount } : timeRange,
         arrivalDistribution,
         arrivalParams[arrivalDistribution]
       );
 
-      const serviceTimes = generateServiceTimes(
-        arrivalTimes.length,
-        serviceDistribution,
-        serviceParams[serviceDistribution]
-      );
+      const arrivalTimes = usingExcel ? excelInputs.arrivalTimes : randomInputs.arrivalTimes;
+      const interArrivalTimes = usingExcel
+        ? buildInterArrivalTimes(arrivalTimes)
+        : randomInputs.interArrivalTimes;
 
-      const priorities = prioOn
-        ? arrivalTimes.map(() => Math.round(pMin + Math.random() * (pMax - pMin)))
-        : Array(arrivalTimes.length).fill(1);
+      const serviceTimes = usingExcel
+        ? excelInputs.serviceTimes
+        : generateServiceTimes(
+            arrivalTimes.length,
+            serviceDistribution,
+            serviceParams[serviceDistribution]
+          );
+
+      const priorities = usingExcel
+        ? prioOn
+          ? excelInputs.priorities?.length
+            ? excelInputs.priorities
+            : Array(arrivalTimes.length).fill(1)
+          : Array(arrivalTimes.length).fill(1)
+        : prioOn
+          ? arrivalTimes.map(() => Math.round(pMin + Math.random() * (pMax - pMin)))
+          : Array(arrivalTimes.length).fill(1);
 
       const gantt =
         numServers === 1
@@ -454,7 +482,14 @@ export default function GGC() {
         priority: priorities[i]
       }));
 
-      setResult({ table, ganttChart: gantt, utilization: overallUtil, serverUtilizations });
+      setResult({
+        table,
+        ganttChart: gantt,
+        utilization: overallUtil,
+        serverUtilizations,
+        source: usingExcel ? "excel" : "random"
+      });
+      setDataSource(usingExcel ? "excel" : "random");
       setTab("table");
       setSummary(computeSummary(table, overallUtil, serverUtilizations));
     } catch (error) {
@@ -812,6 +847,25 @@ export default function GGC() {
                 </div>
               </div>
 
+              {/* Excel upload */}
+              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-200">
+                <ExcelDataLoader onDataReady={setExcelInputs} />
+                {excelInputs && (
+                  <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <p className="text-sm text-[#2F575D] font-medium">
+                      Excel data loaded. The next run will use the uploaded arrivals, service times, and priorities.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={clearExcelData}
+                      className="self-start md:self-auto px-4 py-2 rounded-lg border border-[#2F575D] text-[#2F575D] font-semibold hover:bg-[#2F575D] hover:text-white transition-colors"
+                    >
+                      Clear Excel Data
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Run Button */}
               <div className="text-center pt-6">
                 <button
@@ -941,6 +995,9 @@ export default function GGC() {
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden my-8 border w-full max-w-8xl mx-auto">
             <div className="bg-[#2F575D] text-white p-6">
               <h2 className="text-3xl font-bold">Results Table</h2>
+              <p className="mt-2 text-sm text-white/80">
+                Source: {isExcelMode ? "Uploaded Excel Data" : "Randomly Generated"}
+              </p>
             </div>
 
             <div className="overflow-x-auto w-full">
