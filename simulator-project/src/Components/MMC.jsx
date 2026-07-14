@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import ExcelDataLoader from './ExcelDataLoader';
+import { runQueueSimulation } from '../utils/queueEngine';
 
 const MMC = () => {
   const [lambda, setLambda] = useState(''); // Arrival rate
@@ -8,6 +10,11 @@ const MMC = () => {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("form");
   const [showFormula, setShowFormula] = useState(false);
+
+  // ---- Excel / simulation mode state ----
+  const [excelInputs, setExcelInputs] = useState(null); // { arrivalTimes, serviceTimes, priorities } | null
+  const [dataSource, setDataSource] = useState("random"); // "random" | "excel"
+  const [simResult, setSimResult] = useState(null); // result from runQueueSimulation
 
   const factorial = (n) => {
     if (n === 0 || n === 1) return 1;
@@ -28,6 +35,32 @@ const MMC = () => {
   };
 
   const calculateMetrics = () => {
+    const c = parseInt(servers, 10);
+
+    // ---- Excel / simulation mode ----
+    if (excelInputs) {
+      if (!servers || c < 1) {
+        alert('Please enter the number of servers (C)');
+        return;
+      }
+      setLoading(true);
+      setTimeout(() => {
+        const priorities = Array(excelInputs.arrivalTimes.length).fill(1);
+        const data = runQueueSimulation(
+          excelInputs.arrivalTimes,
+          excelInputs.serviceTimes,
+          priorities,
+          c
+        );
+        setSimResult(data);
+        setDataSource('excel');
+        setLoading(false);
+        setTab('simulation');
+      }, 1000);
+      return;
+    }
+
+    // ---- Analytical (random parameters) mode ----
     if (!lambda || !mu || !servers) {
       alert('Please enter all values');
       return;
@@ -35,7 +68,6 @@ const MMC = () => {
 
     const arrivalRate = parseFloat(lambda);
     const serviceRate = parseFloat(mu);
-    const c = parseInt(servers, 10);
 
     if (arrivalRate <= 0 || serviceRate <= 0 || c <= 0) {
       alert('Please enter positive values');
@@ -93,6 +125,7 @@ const MMC = () => {
       setLoading(false);
       setTab("results");
       setShowFormula(false);
+      setDataSource('random');
     }, 1500);
   };
 
@@ -102,8 +135,16 @@ const MMC = () => {
     setMu('');
     setServers('');
     setResults(null);
+    setSimResult(null);
+    setExcelInputs(null);
+    setDataSource('random');
     setTab("form");
     setShowFormula(false);
+  };
+
+  const clearExcelData = () => {
+    setExcelInputs(null);
+    setDataSource('random');
   };
 
   // Results cards data - WITH FORMULAS
@@ -175,7 +216,7 @@ const MMC = () => {
               Input Parameters
             </button>
             <button
-              onClick={() => tab === "results" && setTab("results")}
+              onClick={() => results && setTab("results")}
               className={`flex-1 py-4 text-center font-bold text-lg transition ${
                 tab === "results" 
                   ? "bg-[#2F575D] text-white" 
@@ -183,7 +224,18 @@ const MMC = () => {
               } ${!results && "opacity-50 cursor-not-allowed"}`}
               disabled={!results}
             >
-              Results
+              Analytical Results
+            </button>
+            <button
+              onClick={() => simResult && setTab("simulation")}
+              className={`flex-1 py-4 text-center font-bold text-lg transition ${
+                tab === "simulation"
+                  ? "bg-[#28363D] text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              } ${!simResult && "opacity-50 cursor-not-allowed"}`}
+              disabled={!simResult}
+            >
+              Simulation Table
             </button>
           </div>
 
@@ -193,49 +245,71 @@ const MMC = () => {
               <h2 className="text-3xl font-bold text-center text-[#2F575D] mb-8">
                 Enter M/M/C Queue Parameters
               </h2>
+
+              {/* ---- Excel upload block ---- */}
+              <div className="mb-8">
+                <ExcelDataLoader onDataReady={setExcelInputs} />
+                {excelInputs && (
+                  <div className="mt-2 flex items-center justify-between bg-[#6D9197]/10 border border-[#6D9197]/40 rounded-xl px-5 py-3">
+                    <span className="text-sm font-semibold text-[#2F575D]">
+                      ✅ Excel data loaded — {excelInputs.arrivalTimes.length} patients. Clicking &quot;Calculate&quot; will run a multi-server simulation instead of the analytical formula.
+                    </span>
+                    <button
+                      onClick={clearExcelData}
+                      className="ml-4 text-sm font-bold text-red-600 hover:text-red-800 whitespace-nowrap"
+                    >
+                      Clear ✕
+                    </button>
+                  </div>
+                )}
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {/* Arrival Rate */}
-                <div className="group">
-                  <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
-                     Arrival Rate (λ)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={lambda}
-                    onChange={(e) => setLambda(e.target.value)}
-                    className="w-full px-6 py-4 text-xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                             border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
-                             transition-all duration-300 shadow-inner"
-                    placeholder="e.g., 3.96"
-                  />
-                  <p className="mt-2 text-xs text-gray-600 text-center font-medium">
-                    Customers arriving per unit time
-                  </p>
-                </div>
+                {/* Arrival Rate — hidden when Excel is loaded (λ comes from Excel) */}
+                {!excelInputs && (
+                  <div className="group">
+                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                       Arrival Rate (λ)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={lambda}
+                      onChange={(e) => setLambda(e.target.value)}
+                      className="w-full px-6 py-4 text-xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
+                               border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
+                               transition-all duration-300 shadow-inner"
+                      placeholder="e.g., 3.96"
+                    />
+                    <p className="mt-2 text-xs text-gray-600 text-center font-medium">
+                      Customers arriving per unit time
+                    </p>
+                  </div>
+                )}
 
-                {/* Service Rate */}
-                <div className="group">
-                  <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
-                    Service Rate (μ)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={mu}
-                    onChange={(e) => setMu(e.target.value)}
-                    className="w-full px-6 py-4 text-xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                             border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20 
-                             transition-all duration-300 shadow-inner"
-                    placeholder="e.g., 5.00"
-                  />
-                  <p className="mt-2 text-xs text-gray-600 text-center font-medium">
-                    Customers served per unit time
-                  </p>
-                </div>
+                {/* Service Rate — hidden when Excel is loaded */}
+                {!excelInputs && (
+                  <div className="group">
+                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                      Service Rate (μ)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={mu}
+                      onChange={(e) => setMu(e.target.value)}
+                      className="w-full px-6 py-4 text-xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
+                               border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20 
+                               transition-all duration-300 shadow-inner"
+                      placeholder="e.g., 5.00"
+                    />
+                    <p className="mt-2 text-xs text-gray-600 text-center font-medium">
+                      Customers served per unit time
+                    </p>
+                  </div>
+                )}
 
-                {/* Number of Servers */}
+                {/* Number of Servers — always shown */}
                 <div className="group">
                   <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
                     Number of Servers (C)
@@ -269,17 +343,22 @@ const MMC = () => {
                   {loading ? (
                     <div className="flex items-center gap-3">
                       <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Calculating...
+                      {excelInputs ? 'Running Simulation...' : 'Calculating...'}
                     </div>
                   ) : (
                     <>
-                      <span className="relative z-10">CALCULATE METRICS</span>
+                      <span className="relative z-10">{excelInputs ? 'RUN SIMULATION' : 'CALCULATE METRICS'}</span>
                       <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197] 
                                     opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
                     </>
                   )}
                 </button>
               </div>
+              <p className="mt-4 text-center text-sm font-medium text-[#2F575D]">
+                {excelInputs
+                  ? 'Will run a patient-by-patient simulation using your Excel data.'
+                  : 'Will compute analytical M/M/C queueing metrics from the parameters above.'}
+              </p>
             </div>
           )}
 
@@ -537,6 +616,68 @@ Results:
             </div>
           )}
         </div>
+
+        {/* =============== SIMULATION TABLE TAB =============== */}
+        {tab === "simulation" && simResult && (
+          <div className="p-6">
+            <h2 className="text-2xl font-bold text-center text-[#2F575D] mb-2">Simulation Results — M/M/C</h2>
+            <p className="text-center text-sm text-gray-500 mb-6">Data source: Excel upload · {simResult.table.length} patients · {parseInt(servers) || 1} server(s) · Utilization: {simResult.utilization}%</p>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              {[
+                { label: 'Avg Wait Time', value: (simResult.table.reduce((s, r) => s + r.waitTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#6D9197] to-[#2F575D]' },
+                { label: 'Avg Service Time', value: (simResult.table.reduce((s, r) => s + r.serviceTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#2F575D] to-[#28363D]' },
+                { label: 'Avg Turnaround', value: (simResult.table.reduce((s, r) => s + r.turnaroundTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#28363D] to-[#6D9197]' },
+                { label: 'Utilization', value: simResult.utilization + '%', color: 'from-[#6D9197] to-[#28363D]' },
+              ].map((card, i) => (
+                <div key={i} className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 text-white text-center shadow-lg`}>
+                  <div className="text-2xl font-black">{card.value}</div>
+                  <div className="text-xs mt-1 font-medium opacity-90">{card.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto rounded-2xl shadow border border-gray-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#28363D] text-white">
+                    {['#', 'Arrival Time', 'Service Time', 'Start Time', 'End Time', 'Wait Time', 'Turnaround', 'Server'].map(h => (
+                      <th key={h} className="px-4 py-3 text-center font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {simResult.table.map((row, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#f3f7f8]'}>
+                      <td className="px-4 py-2 text-center font-bold text-[#2F575D]">{row.serialNumber}</td>
+                      <td className="px-4 py-2 text-center">{row.arrivalTime}</td>
+                      <td className="px-4 py-2 text-center">{row.serviceTime}</td>
+                      <td className="px-4 py-2 text-center">{row.startTime}</td>
+                      <td className="px-4 py-2 text-center">{row.endTime}</td>
+                      <td className="px-4 py-2 text-center font-medium text-[#6D9197]">{row.waitTime}</td>
+                      <td className="px-4 py-2 text-center">{row.turnaroundTime}</td>
+                      <td className="px-4 py-2 text-center">
+                        <span className="bg-[#6D9197]/20 text-[#2F575D] font-semibold px-2 py-0.5 rounded-full text-xs">{row.server}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-center mt-8 gap-4">
+              <button
+                onClick={resetForm}
+                className="px-8 py-3 bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white font-bold rounded-xl hover:shadow-lg transition-all hover:scale-105"
+              >
+                New Calculation
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Loading Overlay */}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ExcelDataLoader from "./ExcelDataLoader";
+import { runQueueSimulation } from '../utils/queueEngine';
 
 const GGC = () => {
   // State variables
@@ -24,6 +25,7 @@ const GGC = () => {
   const [showFormula, setShowFormula] = useState(false);
   const [excelInputs, setExcelInputs] = useState(null);
   const [dataSource, setDataSource] = useState("random");
+  const [simResult, setSimResult] = useState(null);
 
   const factorial = (n) => {
     if (n === 0 || n === 1) return 1;
@@ -120,6 +122,32 @@ const GGC = () => {
 
     const usingExcel = Boolean(excelInputs);
 
+    const c = parseInt(servers, 10);
+
+    // ---- Excel / simulation mode ----
+    if (usingExcel) {
+      if (!servers || c < 1) {
+        alert('Please enter the number of servers (C)');
+        return;
+      }
+      setLoading(true);
+      setTimeout(() => {
+        const priorities = excelInputs.priorities || Array(excelInputs.arrivalTimes.length).fill(1);
+        const data = runQueueSimulation(
+          excelInputs.arrivalTimes,
+          excelInputs.serviceTimes,
+          priorities,
+          c
+        );
+        setSimResult(data);
+        setDataSource('excel');
+        setLoading(false);
+        setTab('simulation');
+      }, 1000);
+      return;
+    }
+
+    // ---- Analytical (random parameters) mode ----
     // Validate inputs based on distribution
     if (distribution === 'uniform') {
       // Check arrival limits
@@ -144,8 +172,6 @@ const GGC = () => {
       }
     }
 
-    const c = parseInt(servers, 10);
-    
     // Calculate arrival and service parameters
     const arrivalParams = calculateArrivalParams();
     const serviceParams = calculateServiceParams();
@@ -254,9 +280,11 @@ const GGC = () => {
     setServiceVariance('');
     
     setResults(null);
+    setSimResult(null);
+    setExcelInputs(null);
+    setDataSource('random');
     setTab("form");
     setShowFormula(false);
-    clearExcelData();
   };
 
   // Results cards data - Exact same colors as MGC
@@ -344,7 +372,7 @@ const GGC = () => {
               Input Parameters
             </button>
             <button
-              onClick={() => tab === "results" && setTab("results")}
+              onClick={() => results && setTab("results")}
               className={`flex-1 py-4 text-center font-bold text-lg transition ${
                 tab === "results" 
                   ? "bg-[#2F575D] text-white" 
@@ -352,7 +380,18 @@ const GGC = () => {
               } ${!results && "opacity-50 cursor-not-allowed"}`}
               disabled={!results}
             >
-              Results
+              Analytical Results
+            </button>
+            <button
+              onClick={() => simResult && setTab("simulation")}
+              className={`flex-1 py-4 text-center font-bold text-lg transition ${
+                tab === "simulation"
+                  ? "bg-[#28363D] text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              } ${!simResult && "opacity-50 cursor-not-allowed"}`}
+              disabled={!simResult}
+            >
+              Simulation Table
             </button>
           </div>
 
@@ -437,12 +476,12 @@ const GGC = () => {
       {excelInputs && (
         <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white border border-gray-200 rounded-2xl px-5 py-4 shadow-sm">
           <p className="text-sm text-[#2F575D] font-medium">
-            Excel data loaded. The next calculation will use the uploaded workbook.
+            ✅ Excel data loaded — {excelInputs.arrivalTimes.length} patients. Clicking &quot;Run Simulation&quot; will run a multi-server simulation instead of the analytical formula.
           </p>
           <button
             type="button"
             onClick={clearExcelData}
-            className="self-start md:self-auto px-4 py-2 rounded-lg border border-[#2F575D] text-[#2F575D] font-semibold hover:bg-[#2F575D] hover:text-white transition-colors"
+            className="self-start md:self-auto px-4 py-2 rounded-lg border border-red-600 text-red-600 font-semibold hover:bg-red-650 hover:text-white transition-colors"
           >
             Clear Excel Data
           </button>
@@ -606,17 +645,22 @@ const GGC = () => {
         {loading ? (
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            Calculating...
+            {excelInputs ? 'Running Simulation...' : 'Calculating...'}
           </div>
         ) : (
           <>
-            <span className="relative z-10">CALCULATE G/G/C METRICS</span>
+            <span className="relative z-10">{excelInputs ? 'RUN SIMULATION' : 'CALCULATE METRICS'}</span>
             <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197] 
                           opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
           </>
         )}
       </button>
     </div>
+    <p className="mt-4 text-center text-sm font-medium text-[#2F575D]">
+      {excelInputs
+        ? 'Will run a patient-by-patient simulation using your Excel data.'
+        : 'Will compute analytical G/G/C queueing metrics from the parameters above.'}
+    </p>
   </div>
 )}
           {/* Results Tab */}
@@ -890,6 +934,68 @@ Results:
             </div>
           )}
         </div>
+
+        {/* =============== SIMULATION TABLE TAB (Excel mode) =============== */}
+        {tab === "simulation" && simResult && (
+          <div className="p-6">
+            <h2 className="text-2xl font-bold text-center text-[#2F575D] mb-2">Simulation Results &mdash; G/G/C</h2>
+            <p className="text-center text-sm text-gray-500 mb-6">Data source: Excel upload &middot; {simResult.table.length} patients &middot; {parseInt(servers) || 1} server(s) &middot; Utilization: {simResult.utilization}%</p>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              {[
+                { label: 'Avg Wait Time', value: (simResult.table.reduce((s, r) => s + r.waitTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#6D9197] to-[#2F575D]' },
+                { label: 'Avg Service Time', value: (simResult.table.reduce((s, r) => s + r.serviceTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#2F575D] to-[#28363D]' },
+                { label: 'Avg Turnaround', value: (simResult.table.reduce((s, r) => s + r.turnaroundTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#28363D] to-[#6D9197]' },
+                { label: 'Utilization', value: simResult.utilization + '%', color: 'from-[#6D9197] to-[#28363D]' },
+              ].map((card, i) => (
+                <div key={i} className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 text-white text-center shadow-lg`}>
+                  <div className="text-2xl font-black">{card.value}</div>
+                  <div className="text-xs mt-1 font-medium opacity-90">{card.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto rounded-2xl shadow border border-gray-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#28363D] text-white">
+                    {['#', 'Arrival Time', 'Service Time', 'Start Time', 'End Time', 'Wait Time', 'Turnaround', 'Server'].map(h => (
+                      <th key={h} className="px-4 py-3 text-center font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {simResult.table.map((row, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#f3f7f8]'}>
+                      <td className="px-4 py-2 text-center font-bold text-[#2F575D]">{row.serialNumber}</td>
+                      <td className="px-4 py-2 text-center">{row.arrivalTime}</td>
+                      <td className="px-4 py-2 text-center">{row.serviceTime}</td>
+                      <td className="px-4 py-2 text-center">{row.startTime}</td>
+                      <td className="px-4 py-2 text-center">{row.endTime}</td>
+                      <td className="px-4 py-2 text-center font-medium text-[#6D9197]">{row.waitTime}</td>
+                      <td className="px-4 py-2 text-center">{row.turnaroundTime}</td>
+                      <td className="px-4 py-2 text-center">
+                        <span className="bg-[#6D9197]/20 text-[#2F575D] font-semibold px-2 py-0.5 rounded-full text-xs">{row.server}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-center mt-8 gap-4">
+              <button
+                onClick={resetForm}
+                className="px-8 py-3 bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white font-bold rounded-xl hover:shadow-lg transition-all hover:scale-105"
+              >
+                New Calculation
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Loading Overlay */}
