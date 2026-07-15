@@ -54,7 +54,7 @@ const calculateServerUtilization = (ganttChart, serverNumber) => {
   return utilization.toFixed(1);
 };
 
-function calculateSchedule(arr, serv, prio, numServers = 1) {
+function calculateSchedule(arr, serv, numServers = 1) {
   const gantt = [];
   let t = 0;
   const q = [];
@@ -62,7 +62,6 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
     id: i,
     arr: a,
     rem: serv[i],
-    prio: prio[i],
     completed: false,
     startTime: null,
     server: null
@@ -84,8 +83,8 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
       .filter((c) => c.arr <= t && !c.completed && !q.some((x) => x.id === c.id))
       .forEach((c) => q.push(c));
 
-    // Sort queue by priority and arrival time
-    q.sort((a, b) => a.prio - b.prio || a.arr - b.arr);
+    // Sort queue by arrival time (FCFS)
+    q.sort((a, b) => a.arr - b.arr);
 
     // Check for idle time between server last end time and current time
     for (let s = 0; s < numServers; s++) {
@@ -96,7 +95,6 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
         if (idleEnd > idleStart) {
           gantt.push({
             id: -1, // -1 indicates idle time
-            prio: 0,
             server: s + 1,
             start: +idleStart.toFixed(2),
             end: +idleEnd.toFixed(2),
@@ -112,61 +110,39 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
     // Check if any server is idle and can start a new process
     for (let s = 0; s < numServers; s++) {
       if (serverAvailableTime[s] <= t && !serverCurrentProcess[s] && q.length > 0) {
-        // Find the highest priority process that can be assigned to this server
-        let processIndex = -1;
+        // Take the first customer in the queue (FCFS)
+        const c = q.shift();
 
-        // First, try to find a process with the same priority as currently running processes
-        const currentPriorities = serverCurrentProcess.filter(p => p !== null).map(p => p.prio);
-        const minCurrentPriority = currentPriorities.length > 0 ? Math.min(...currentPriorities) : Infinity;
-
-        // Try to find a process with the same priority as the lowest priority currently running
-        for (let i = 0; i < q.length; i++) {
-          if (q[i].prio <= minCurrentPriority) {
-            processIndex = i;
-            break;
-          }
+        // If this is the first time this process is being served, record its start time
+        if (c.startTime === null) {
+          c.startTime = t;
         }
 
-        // If no process with matching priority found, take the highest priority available
-        if (processIndex === -1 && q.length > 0) {
-          processIndex = 0;
-        }
+        // Assign to server
+        c.server = s + 1;
+        serverCurrentProcess[s] = c;
 
-        if (processIndex !== -1) {
-          const c = q.splice(processIndex, 1)[0];
+        // Calculate service duration
+        const serve = c.rem;
 
-          // If this is the first time this process is being served, record its start time
-          if (c.startTime === null) {
-            c.startTime = t;
-          }
+        // Update server availability and last end time
+        serverAvailableTime[s] = t + serve;
+        serverLastEndTime[s] = t + serve;
 
-          // Assign to server
-          c.server = s + 1;
-          serverCurrentProcess[s] = c;
+        // Add to Gantt chart
+        gantt.push({
+          id: c.id,
+          server: s + 1,
+          start: +t.toFixed(2),
+          end: +(t + serve).toFixed(2),
+          dur: +serve.toFixed(2),
+          preempted: false,
+          idle: false
+        });
 
-          // Calculate service duration
-          const serve = c.rem;
-
-          // Update server availability and last end time
-          serverAvailableTime[s] = t + serve;
-          serverLastEndTime[s] = t + serve;
-
-          // Add to Gantt chart
-          gantt.push({
-            id: c.id,
-            prio: c.prio,
-            server: s + 1,
-            start: +t.toFixed(2),
-            end: +(t + serve).toFixed(2),
-            dur: +serve.toFixed(2),
-            preempted: false,
-            idle: false
-          });
-
-          // Mark customer as completed
-          c.completed = true;
-          c.rem = 0;
-        }
+        // Mark customer as completed
+        c.completed = true;
+        c.rem = 0;
       }
     }
 
@@ -214,7 +190,6 @@ function calculateSchedule(arr, serv, prio, numServers = 1) {
       if (idleEnd > idleStart) {
         gantt.push({
           id: -1,
-          prio: 0,
           server: s + 1,
           start: +idleStart.toFixed(2),
           end: +idleEnd.toFixed(2),
@@ -256,11 +231,8 @@ function performanceMeasures(arr, serv, gantt, startTime, endingTime, waitingTim
 }
 
 // ===================== LOCAL SYNTHETIC DATA GENERATOR (no backend needed) =====================
-// Builds a full Poisson-arrival / exponential-service dataset, then runs it
-// through this file's own multi-server calculateSchedule — this is what
-// previously went to the (broken) backend endpoint.
 
-function generateCummulativeProbability(lambda, mu, priorityParams, numServers) {
+function generateCummulativeProbability(lambda, mu, numServers) {
   let cp = 0, cplookup = 0, count = 0;
   const cparray = [];
   const cplookuparray = [];
@@ -284,17 +256,6 @@ function generateCummulativeProbability(lambda, mu, priorityParams, numServers) 
     serviceTime.push(st < 1 ? 1 : st);
   }
 
-  let priority;
-  if (priorityParams) {
-    priority = [];
-    for (let i = 0; i < cpLookup.length; i++) {
-      const r = Math.random();
-      priority.push(Math.round(priorityParams.a + r * (priorityParams.b - priorityParams.a)));
-    }
-  } else {
-    priority = Array(cpLookup.length).fill(1);
-  }
-
   const inter = [0];
   for (let i = 1; i < cpLookup.length; i++) {
     const r = Math.random();
@@ -314,7 +275,7 @@ function generateCummulativeProbability(lambda, mu, priorityParams, numServers) 
   const avgTimeBetweenArrival = arrivalTime.map((_, i) => i);
 
   const startTime = [], endingTime = [], waitingTime = [], turnAroundTime = [], server = [];
-  const gantt = calculateSchedule(arrivalTime, serviceTime, priority, numServers);
+  const gantt = calculateSchedule(arrivalTime, serviceTime, numServers);
   performanceMeasures(arrivalTime, serviceTime, gantt, startTime, endingTime, waitingTime, turnAroundTime, server);
 
   const table = arrivalTime.map((at, i) => ({
@@ -324,7 +285,6 @@ function generateCummulativeProbability(lambda, mu, priorityParams, numServers) 
     avgTimeBetweenArrival: avgTimeBetweenArrival[i],
     interArrival: interArrival[i],
     arrivalTime: at,
-    priority: priority[i],
     serviceTime: serviceTime[i],
     startTime: startTime[i] || 0,
     endTime: endingTime[i] || 0,
@@ -356,41 +316,6 @@ function computeSummary(table, utilization, ganttChart = null) {
     avgResponse: avg(table.map((t) => t.responseTime || 0))
   };
 
-  // Calculate priority-wise averages if priority is enabled
-  let priorityWise = null;
-
-  // Check if there are multiple priorities
-  const uniquePriorities = [...new Set(table.map(t => t.priority))];
-  if (uniquePriorities.length > 1) {
-    priorityWise = {};
-
-    uniquePriorities.forEach(priority => {
-      const priorityTable = table.filter(t => t.priority === priority);
-      if (priorityTable.length > 0) {
-        priorityWise[`priority${priority}`] = {
-          count: priorityTable.length,
-          avgWait: avg(priorityTable.map(t => t.waitTime || 0)),
-          avgTAT: avg(priorityTable.map(t => t.turnaroundTime || 0)),
-          avgService: avg(priorityTable.map(t => t.serviceTime || 0)),
-          avgResponse: avg(priorityTable.map(t => t.responseTime || 0)),
-          percentage: ((priorityTable.length / table.length) * 100).toFixed(1),
-          // Server distribution for M/M/C
-          serverDistribution: ganttChart ? calculateServerDistribution(ganttChart, priorityTable) : null
-        };
-      }
-    });
-  }
-
-  // Calculate priority distribution
-  const priorityDistribution = {};
-  uniquePriorities.forEach(priority => {
-    const count = table.filter(t => t.priority === priority).length;
-    priorityDistribution[`priority${priority}`] = {
-      count,
-      percentage: ((count / table.length) * 100).toFixed(1)
-    };
-  });
-
   // Calculate server-wise performance for M/M/C
   let serverWise = null;
   if (ganttChart) {
@@ -414,36 +339,10 @@ function computeSummary(table, utilization, ganttChart = null) {
 
   return {
     ...overall,
-    priorityWise,
-    priorityDistribution,
     serverWise,
     totalCustomers: table.length,
-    uniquePriorities: uniquePriorities.length,
     uniqueServers: ganttChart ? [...new Set(table.map(t => t.server))].length : 1
   };
-}
-
-// Helper function to calculate server distribution for each priority
-function calculateServerDistribution(ganttChart, priorityTable) {
-  const serverCount = {};
-
-  priorityTable.forEach(customer => {
-    // Find which server served this customer
-    const serverSegment = ganttChart.find(seg => seg.id === customer.serialNumber - 1);
-    if (serverSegment) {
-      const server = serverSegment.server;
-      serverCount[server] = (serverCount[server] || 0) + 1;
-    }
-  });
-
-  // Convert to percentages
-  const total = priorityTable.length;
-  const distribution = {};
-  Object.entries(serverCount).forEach(([server, count]) => {
-    distribution[`server${server}`] = ((count / total) * 100).toFixed(1);
-  });
-
-  return distribution;
 }
 
 // ===================== COMPONENT =====================
@@ -451,18 +350,15 @@ function calculateServerDistribution(ganttChart, priorityTable) {
 export default function MMCSimulation() {
   const [lambda, setLambda] = useState(3.96);
   const [mu, setMu] = useState(5);
-  const [pMin, setPMin] = useState(1);
-  const [pMax, setPMax] = useState(3);
-  const [prioOn, setPrioOn] = useState(true);
   const [result, setResult] = useState(null);
   const [tab, setTab] = useState("form");
   const [chartType, setChartType] = useState("bar");
   const [metric, setMetric] = useState("waiting");
   const [summary, setSummary] = useState(null);
   const [numServers, setNumServers] = useState(2);
-  const [excelData, setExcelData] = useState(null); // { arrivalTimes, serviceTimes, priorities }
-  const [dataSource, setDataSource] = useState("random"); // "random" | "excel" — reflects the *last run*
-  const themeColors = ["#6D9197", "#2F575D", "#28363D"];
+  const [excelData, setExcelData] = useState(null);
+  const [dataSource, setDataSource] = useState("random");
+  const themeColors = ["#2C80D3", "#0C3E72", "#091d3a"];
 
   useEffect(() => {
     setTab("form");
@@ -471,9 +367,7 @@ export default function MMCSimulation() {
   const runSimulation = () => {
     if (excelData) {
       // ---- Run from uploaded Excel data ----
-      const priorities = prioOn
-        ? excelData.priorities
-        : Array(excelData.arrivalTimes.length).fill(1);
+      const priorities = Array(excelData.arrivalTimes.length).fill(1);
       const data = runQueueSimulation(
         excelData.arrivalTimes,
         excelData.serviceTimes,
@@ -491,7 +385,6 @@ export default function MMCSimulation() {
     const data = generateCummulativeProbability(
       lambda,
       mu,
-      prioOn ? { a: pMin, b: pMax } : null,
       numServers
     );
     setResult(data);
@@ -507,23 +400,17 @@ export default function MMCSimulation() {
 
   const isExcelMode = dataSource === "excel";
 
-  const getPriorityGradient = (prio) => {
-    if (prio === 1) return "bg-gradient-to-br from-[#6D9197] to-[#2F575D]";
-    if (prio === 2) return "bg-gradient-to-br from-[#2F575D] to-[#28363D]";
-    return "bg-gradient-to-br from-[#28363D] to-[#6D9197]";
-  };
-
   return (
-    <div className="min-h-screen bg-[#f3f7f8]">
+    <div className="min-h-screen bg-[#f0f6ff]">
 
       {/* TABS */}
-      <nav className="bg-[#28363D] border-b shadow-sm w-full">
+      <nav className="bg-[#091d3a] border-b shadow-sm w-full">
         <div className="flex w-full">
           {["form", "gantt", "table", "graphs", "calc"].map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${tab === t ? "bg-[#6D9197] text-white" : "bg-[#28363D] text-gray-200 hover:bg-[#2F575D]"
+              className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${tab === t ? "bg-[#2C80D3] text-white" : "bg-[#091d3a] text-gray-200 hover:bg-[#0C3E72]"
                 } transition`}
             >
               {t === "form" ? "Input Params" : t === "gantt" ? "Gantt" : t === "table" ? "Table" : t === "graphs" ? "Graphs" : "Calculations"}
@@ -540,8 +427,8 @@ export default function MMCSimulation() {
             <div className="mt-8">
               <ExcelDataLoader onDataReady={setExcelData} />
               {excelData && (
-                <div className="max-w-2xl mx-auto -mt-4 mb-6 flex items-center justify-between bg-[#6D9197]/10 border border-[#6D9197]/40 rounded-xl px-6 py-3">
-                  <span className="text-sm font-semibold text-[#2F575D]">
+                <div className="max-w-2xl mx-auto -mt-4 mb-6 flex items-center justify-between bg-[#2C80D3]/10 border border-[#2C80D3]/40 rounded-xl px-6 py-3">
+                  <span className="text-sm font-semibold text-[#0C3E72]">
                     Excel data loaded — {excelData.arrivalTimes.length} customers. Running the
                     simulation will use this data instead of the fields below.
                   </span>
@@ -558,19 +445,19 @@ export default function MMCSimulation() {
             <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 border border-gray-100 mb-8">
 
               {/* Main Title */}
-              <h2 className="text-4xl font-extrabold text-center mb-10 text-[#2F575D] tracking-tight">
-                M/M/C Priority Queue — Simulation Setup
+              <h2 className="text-4xl font-extrabold text-center mb-10 text-[#0C3E72] tracking-tight">
+                M/M/C Queue — Simulation Setup
               </h2>
 
               {/* FULL HORIZONTAL LAYOUT */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-                {/* Left Side: Lambda, Mu, Priority Toggle */}
+                {/* Left Side: Lambda, Mu */}
                 <div className="lg:col-span-7 space-y-8">
                   {/* Row 1: Lambda & Mu */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="group">
-                      <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                      <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                         Arrival Rate (λ)
                       </label>
                       <input
@@ -579,7 +466,7 @@ export default function MMCSimulation() {
                         value={lambda}
                         onChange={(e) => setLambda(+e.target.value)}
                         className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                             border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
+                             border-2 border-[#2C80D3]/30 rounded-2xl focus:border-[#2C80D3] focus:ring-4 focus:ring-[#2C80D3]/20 
                              transition-all duration-300 shadow-inner"
                         placeholder="3.96"
                       />
@@ -589,7 +476,7 @@ export default function MMCSimulation() {
                     </div>
 
                     <div className="group">
-                      <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                      <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                         Service Rate (μ)
                       </label>
                       <input
@@ -598,7 +485,7 @@ export default function MMCSimulation() {
                         value={mu}
                         onChange={(e) => setMu(+e.target.value)}
                         className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                             border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20 
+                             border-2 border-[#0C3E72]/30 rounded-2xl focus:border-[#0C3E72] focus:ring-4 focus:ring-[#0C3E72]/20 
                              transition-all duration-300 shadow-inner"
                         placeholder="5.00"
                       />
@@ -608,7 +495,7 @@ export default function MMCSimulation() {
 
                   {/* Row 1b: Number of Servers */}
                   <div className="group">
-                    <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                    <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                       Number of Servers (c)
                     </label>
                     <input
@@ -618,92 +505,33 @@ export default function MMCSimulation() {
                       value={numServers}
                       onChange={(e) => setNumServers(Math.max(1, +e.target.value))}
                       className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                           border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
+                           border-2 border-[#2C80D3]/30 rounded-2xl focus:border-[#2C80D3] focus:ring-4 focus:ring-[#2C80D3]/20 
                            transition-all duration-300 shadow-inner"
                     />
                     <p className="mt-2 text-xs text-gray-600 text-center font-medium">How many servers/desks are open</p>
                   </div>
-
-                  {/* Row 2: Priority Toggle */}
-                  <div className="bg-gradient-to-r from-[#6D9197]/10 to-[#2F575D]/10 rounded-3xl p-8 border border-[#6D9197]/20">
-                    <label className="flex items-center justify-center gap-6 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={prioOn}
-                        onChange={(e) => setPrioOn(e.target.checked)}
-                        className="w-12 h-12 rounded-2xl accent-[#6D9197] focus:ring-8 focus:ring-[#6D9197]/30 
-                             transition-all duration-300 hover:scale-110"
-                      />
-                      <div className="text-center">
-                        <div className="text-3xl font-black text-[#28363D]">
-                          {prioOn ? "Priority Queue: ENABLED" : "Priority Queue: DISABLED"}
-                        </div>
-                        <p className="mt-2 text-sm text-gray-700 font-medium">
-                          Lower number = Higher priority · Preemptive scheduling
-                        </p>
-                      </div>
-                    </label>
-                  </div>
                 </div>
 
-                {/* Right Side: Priority Range + Run Button */}
+                {/* Right Side: Run Button */}
                 <div className="lg:col-span-5 space-y-8">
-
-                  {/* Priority Range Box */}
-                  {prioOn && (
-                    <div className="bg-[#28363D]/5 border-2 border-dashed border-[#28363D]/30 rounded-3xl p-8">
-                      <h3 className="text-2xl font-bold text-center text-[#2F575D] mb-6">Priority Levels</h3>
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="text-center">
-                          <label className="block text-sm font-bold text-green-700 uppercase mb-3">
-                            Highest Priority
-                          </label>
-                          <input
-                            type="number"
-                            value={pMin}
-                            onChange={(e) => setPMin(+e.target.value)}
-                            className="w-full px-6 py-5 text-3xl font-black text-center bg-green-50 border-4 border-green-600 
-                                   rounded-2xl focus:ring-8 focus:ring-green-300 transition-all"
-                            min="1"
-                          />
-                          <p className="mt-2 text-xs text-green-800 font-bold">Lowest Number</p>
-                        </div>
-                        <div className="text-center">
-                          <label className="block text-sm font-bold text-red-700 uppercase mb-3">
-                            Lowest Priority
-                          </label>
-                          <input
-                            type="number"
-                            value={pMax}
-                            onChange={(e) => setPMax(+e.target.value)}
-                            className="w-full px-6 py-5 text-3xl font-black text-center bg-red-50 border-4 border-red-600 
-                                   rounded-2xl focus:ring-8 focus:ring-red-300 transition-all"
-                            min={pMin || 1}
-                          />
-                          <p className="mt-2 text-xs text-red-800 font-bold">Highest Number</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Run Button - Full Height */}
                   <div className="flex items-center justify-center h-full min-h-48">
                     <div className="w-full max-w-xl">
                       <button
                         onClick={runSimulation}
                         className="group relative w-full px-10 py-10 text-4xl font-extrabold text-white 
-                             bg-gradient-to-r from-[#6D9197] via-[#2F575D] to-[#28363D] 
-                             rounded-3xl shadow-2xl hover:shadow-[#6D9197]/60 
+                             bg-gradient-to-r from-[#2C80D3] via-[#0C3E72] to-[#091d3a] 
+                             rounded-3xl shadow-2xl hover:shadow-[#2C80D3]/60 
                              transform hover:scale-105 active:scale-95 transition-all duration-500 
                              overflow-hidden"
                       >
                         <span className="relative z-10 drop-shadow-2xl">RUN SIMULATION</span>
-                        <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197] 
+                        <div className="absolute inset-0 bg-gradient-to-l from-[#091d3a] to-[#2C80D3] 
                                   opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-                        <div className="absolute -inset-2 bg-gradient-to-r from-[#6D9197] to-[#2F575D] 
+                        <div className="absolute -inset-2 bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] 
                                   blur-2xl opacity-30 group-hover:opacity-70 transition-opacity"></div>
                       </button>
-                      <p className="mt-4 text-center text-sm font-semibold text-[#2F575D]">
+                      <p className="mt-4 text-center text-sm font-semibold text-[#0C3E72]">
                         {excelData
                           ? "Will run using the uploaded Excel data."
                           : "Will run using the parameters above (randomly generated)."}
@@ -720,7 +548,7 @@ export default function MMCSimulation() {
         {/* =============== GANTT CHART =============== */}
         {tab === "gantt" && result && result.ganttChart && result.ganttChart.length > 0 ? (
           <div className="bg-white rounded-2xl shadow-xl my-8 p-8 border overflow-auto max-w-7xl mx-auto">
-            <h2 className="text-2xl font-bold text-center mb-8 text-[#2F575D]">
+            <h2 className="text-2xl font-bold text-center mb-8 text-[#0C3E72]">
               Gantt Chart
             </h2>
 
@@ -731,7 +559,7 @@ export default function MMCSimulation() {
 
               return (
                 <div key={serverNum} className="mb-12">
-                  <h3 className="text-xl font-bold text-center mb-6 text-white bg-[#6D9197] py-3 rounded-lg">
+                  <h3 className="text-xl font-bold text-center mb-6 text-white bg-[#2C80D3] py-3 rounded-lg">
                     Server {serverNum}
                   </h3>
 
@@ -741,36 +569,25 @@ export default function MMCSimulation() {
 
                       return (
                         <div key={i} className="relative text-center" style={{ minWidth: `${widthPercent * 2}px` }}>
-                          {seg.preempted && (
-                            <div className="absolute left-1/2 -translate-x-1/2 -top-12 animate-pulse scale-105">
-                              <span className="bg-[#28363D] text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg ring-2 ring-[#2F575D] ring-opacity-70">
-                                PREEMPTED!
-                              </span>
-                            </div>
-                          )}
-
                           <div
                             className={`rounded-xl text-white font-bold flex flex-col items-center justify-center shadow-md transition-all ${seg.idle
                               ? "bg-gray-400 border-2 border-dashed border-gray-500"
-                              : getPriorityGradient(seg.prio)
-                              } ${seg.preempted ? "animate-pulse ring-2 ring-[#2F575D] ring-opacity-70 scale-105" : "hover:scale-105 hover:shadow-lg"}`}
+                              : "bg-gradient-to-br from-[#2C80D3] to-[#0C3E72]"
+                              } hover:scale-105 hover:shadow-lg`}
                             style={{ width: Math.max(widthPercent * 3, 80), height: 96 }}
                           >
                             <div className="text-2xl font-black">
                               {seg.idle ? "IDLE" : `P${seg.id + 1}`}
                             </div>
                             {!seg.idle && (
-                              <>
-                                <div className="text-xs opacity-90 mt-1">Prio: {seg.prio}</div>
-                                <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">{seg.dur}</div>
-                              </>
+                              <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">{seg.dur}</div>
                             )}
                           </div>
 
                           <div className="mt-4">
-                            <div className="text-sm text-[#2F575D] font-semibold">{seg.start}</div>
+                            <div className="text-sm text-[#0C3E72] font-semibold">{seg.start}</div>
                             <div className="w-1 h-8 bg-gray-300 mx-auto my-1"></div>
-                            <div className="text-sm text-[#28363D] font-semibold">{seg.end}</div>
+                            <div className="text-sm text-[#091d3a] font-semibold">{seg.end}</div>
                           </div>
                         </div>
                       );
@@ -781,20 +598,12 @@ export default function MMCSimulation() {
             })}
 
             {/* Legend */}
-            <div className="mt-8 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <h4 className="text-lg font-bold text-yellow-800 mb-2">Legend:</h4>
+            <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-lg font-bold text-blue-800 mb-2">Legend:</h4>
               <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#6D9197] to-[#2F575D] rounded"></div>
-                  <span className="text-sm">Priority 1 (Highest)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#2F575D] to-[#28363D] rounded"></div>
-                  <span className="text-sm">Priority 2</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#28363D] to-[#6D9197] rounded"></div>
-                  <span className="text-sm">Priority 3+</span>
+                  <div className="w-6 h-6 bg-gradient-to-br from-[#2C80D3] to-[#0C3E72] rounded"></div>
+                  <span className="text-sm">Active Process</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-gray-400 border-2 border-dashed border-gray-500 rounded"></div>
@@ -817,11 +626,11 @@ export default function MMCSimulation() {
         {/* =============== TABLE =============== */}
         {tab === "table" && result && result.table && result.table.length > 0 ? (
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden my-8 border w-full max-w-8xl mx-auto">
-            <div className="bg-[#2F575D] text-white p-6 flex items-center justify-between">
+            <div className="bg-[#0C3E72] text-white p-6 flex items-center justify-between">
               <h2 className="text-3xl font-bold">Results Table</h2>
               <span
                 className={`text-sm font-bold px-4 py-2 rounded-full ${
-                  isExcelMode ? "bg-yellow-400 text-[#28363D]" : "bg-[#6D9197] text-white"
+                  isExcelMode ? "bg-sky-400 text-[#091d3a]" : "bg-[#2C80D3] text-white"
                 }`}
               >
                 {isExcelMode ? "Source: Uploaded Excel Data" : "Source: Randomly Generated"}
@@ -829,7 +638,7 @@ export default function MMCSimulation() {
             </div>
 
             {isExcelMode && (
-              <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 text-sm text-yellow-900">
+              <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 text-sm text-blue-900">
                 <strong>Note:</strong> Cp Lookup, Cp, and Avg Time Between Arrival are not applicable
                 for this run — this is real observed data, not randomly generated, so those columns
                 are hidden below.
@@ -838,14 +647,13 @@ export default function MMCSimulation() {
 
             <div className="overflow-x-auto w-full">
               <table className="w-full text-center table-auto text-lg">
-                <thead className="bg-[#6D9197]/80">
+                <thead className="bg-[#2C80D3]/80">
                   <tr>
                     {[
                       "Serial Number",
                       ...(isExcelMode ? [] : ["Cp Lookup", "Cp", "Avg Time Between Arrival"]),
                       "Inter Arrival",
                       "Arrival Time",
-                      "Priority",
                       "Service Time",
                       "Start Time",
                       "End Time",
@@ -856,7 +664,7 @@ export default function MMCSimulation() {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="py-4 px-3 font-bold text-lg border border-[#2F575D]"
+                        className="py-4 px-3 font-bold text-lg border border-[#0C3E72] text-white"
                       >
                         {h}
                       </th>
@@ -868,9 +676,9 @@ export default function MMCSimulation() {
                   {result.table.map((r, i) => (
                     <tr
                       key={i}
-                      className="border-b hover:bg-[#6D9197]/20 transition text-lg"
+                      className="border-b hover:bg-[#2C80D3]/10 transition text-lg"
                     >
-                      <td className="py-3 px-3 font-bold text-lg text-[#2F575D]">{r.serialNumber}</td>
+                      <td className="py-3 px-3 font-bold text-lg text-[#0C3E72]">{r.serialNumber}</td>
                       {!isExcelMode && (
                         <>
                           <td className="py-3 px-3">{r.cpLookup.toFixed(6)}</td>
@@ -880,20 +688,12 @@ export default function MMCSimulation() {
                       )}
                       <td className="py-3 px-3">{r.interArrival}</td>
                       <td className="py-3 px-3">{r.arrivalTime}</td>
-                      <td className="py-3 px-3">
-                        <span className={`px-3 py-1 rounded-full text-white font-bold ${r.priority === 1 ? 'bg-[#6D9197]' :
-                          r.priority === 2 ? 'bg-[#2F575D]' :
-                            'bg-[#28363D]'
-                          }`}>
-                          {r.priority}
-                        </span>
-                      </td>
                       <td className="py-3 px-3">{r.serviceTime}</td>
-                      <td className="py-3 px-3 text-[#2F575D] font-bold">{r.startTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#28363D] font-bold">{r.endTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#6D9197] font-bold">{r.turnaroundTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#6D9197] font-bold">{r.waitTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#2F575D] font-bold">{r.responseTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#0C3E72] font-bold">{r.startTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#091d3a] font-bold">{r.endTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#2C80D3] font-bold">{r.turnaroundTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#2C80D3] font-bold">{r.waitTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#0C3E72] font-bold">{r.responseTime.toFixed(2)}</td>
                       <td className="py-3 px-3 font-bold">{r.server}</td>
                     </tr>
                   ))}
@@ -911,20 +711,20 @@ export default function MMCSimulation() {
         {/* =============== GRAPHS =============== */}
         {tab === "graphs" && result && result.table && result.table.length > 0 ? (
           <div className="bg-white rounded-xl shadow-2xl my-10 border w-full max-w-7xl mx-auto overflow-hidden">
-            <div className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white p-8">
+            <div className="bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white p-8">
               <h2 className="text-3xl font-bold">Performance Analytics</h2>
             </div>
 
             <div className="grid grid-cols-12">
               {/* LEFT PANEL */}
-              <div className="col-span-3 bg-[#28363D] text-white p-10 border-r min-h-[70vh]">
+              <div className="col-span-3 bg-[#091d3a] text-white p-10 border-r min-h-[70vh]">
                 <h3 className="text-xl font-bold mb-6">Graph Options</h3>
 
                 <label className="text-lg font-semibold">Graph Type</label>
                 <select
                   value={chartType}
                   onChange={(e) => setChartType(e.target.value)}
-                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#6D9197] text-white shadow"
+                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#2C80D3] text-white shadow"
                 >
                   <option value="bar">Bar Chart</option>
                   <option value="line">Line Chart</option>
@@ -935,7 +735,7 @@ export default function MMCSimulation() {
                 <select
                   value={metric}
                   onChange={(e) => setMetric(e.target.value)}
-                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#6D9197] text-white shadow"
+                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#2C80D3] text-white shadow"
                 >
                   <option value="waiting">Waiting Time</option>
                   <option value="response">Response Time</option>
@@ -950,7 +750,7 @@ export default function MMCSimulation() {
 
               {/* RIGHT PANEL */}
               <div className="col-span-9 bg-white p-10 min-h-[70vh]">
-                <div className="w-full h-[65vh] bg-[#f3f7f8] rounded-2xl p-6 shadow-inner overflow-auto">
+                <div className="w-full h-[65vh] bg-[#f0f6ff] rounded-2xl p-6 shadow-inner overflow-auto">
                   {(() => {
                     const labels = result.table.map((r) => `P${r.serialNumber}`);
 
@@ -973,9 +773,7 @@ export default function MMCSimulation() {
                         {
                           label: metric === "endTime" ? "End Time" : metric,
                           data: dataForMetric,
-                          backgroundColor: result.table.map((r) =>
-                            r.priority === 1 ? themeColors[0] : r.priority === 2 ? themeColors[1] : themeColors[2]
-                          ),
+                          backgroundColor: themeColors[0],
                           borderColor: "#000",
                           borderWidth: 1,
                         }
@@ -1021,8 +819,8 @@ export default function MMCSimulation() {
                             datasets: [
                               {
                                 data: dataForMetric,
-                                backgroundColor: result.table.map((r) =>
-                                  r.priority === 1 ? themeColors[0] : r.priority === 2 ? themeColors[1] : themeColors[2]
+                                backgroundColor: result.table.map((_, i) =>
+                                  i % 3 === 0 ? themeColors[0] : i % 3 === 1 ? themeColors[1] : themeColors[2]
                                 )
                               }
                             ]
@@ -1043,19 +841,19 @@ export default function MMCSimulation() {
 
         {tab === "calc" && summary && result && (
           <div className="p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto my-10">
-            <h2 className="text-3xl font-bold text-center mb-8 text-[#2F575D]">Performance Calculations</h2>
+            <h2 className="text-3xl font-bold text-center mb-8 text-[#0C3E72]">Performance Calculations</h2>
 
             {/* Server Utilization Cards - M/M/C */}
             <div className="mb-12">
-              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Server Utilization</h3>
+              <h3 className="text-2xl font-bold mb-6 text-[#0C3E72]">Server Utilization</h3>
               <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
                 {Array.from({ length: numServers }, (_, idx) => idx + 1).map((serverNum, i) => (
                   <div
                     key={serverNum}
                     className={`p-8 rounded-2xl text-white shadow-lg ${
                       i % 2 === 0
-                        ? "bg-gradient-to-br from-[#6D9197] to-[#2F575D]"
-                        : "bg-gradient-to-br from-[#2F575D] to-[#28363D]"
+                        ? "bg-gradient-to-br from-[#2C80D3] to-[#0C3E72]"
+                        : "bg-gradient-to-br from-[#0C3E72] to-[#091d3a]"
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -1076,27 +874,27 @@ export default function MMCSimulation() {
 
             {/* Overall Performance Metrics - M/M/C */}
             <div className="mb-12">
-              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Overall Performance Metrics</h3>
+              <h3 className="text-2xl font-bold mb-6 text-[#0C3E72]">Overall Performance Metrics</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2F575D] to-[#28363D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0C3E72] to-[#091d3a] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Waiting Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgWait}</div>
                   <p className="mt-2 text-sm opacity-90">Average wait time</p>
                 </div>
 
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#28363D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2C80D3] to-[#091d3a] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Turnaround Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgTAT}</div>
                   <p className="mt-2 text-sm opacity-90">Average completion time</p>
                 </div>
 
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#2F575D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#091d3a] to-[#0C3E72] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Service Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgService}</div>
                   <p className="mt-2 text-sm opacity-90">Average service time</p>
                 </div>
 
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#2F575D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2C80D3] to-[#0C3E72] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Response Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgResponse}</div>
                   <p className="mt-2 text-sm opacity-90">Average response time</p>
@@ -1104,136 +902,38 @@ export default function MMCSimulation() {
               </div>
             </div>
 
-            {/* Priority Distribution - M/M/C */}
-            {summary.priorityWise && (
-              <div className="mb-12">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-2xl font-bold text-[#2F575D]">Priority Distribution</h3>
-                  <div className="text-lg font-semibold text-[#2F575D]">
-                    Total: {summary.totalCustomers} Customers | {summary.uniquePriorities} Priority Levels
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
-                    <div key={priorityKey} className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#6D9197] text-white shadow-lg">
-                      <div className="flex flex-col items-center">
-                        <h3 className="text-xl font-semibold mb-2">{priorityKey.replace('priority', 'Priority ')}</h3>
-                        <div className="text-3xl font-black">{data.count}</div>
-                        <div className="text-lg mt-1">Customers</div>
-                        <div className="text-xl font-bold mt-2 bg-white text-[#28363D] px-3 py-1 rounded-full">
-                          {data.percentage}%
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Priority-wise Performance Table - M/M/C */}
-            {summary.priorityWise && (
-              <div className="mb-12">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-2xl font-bold text-[#2F575D]">Priority-wise Performance</h3>
-                  <div className="text-lg font-semibold text-[#2F575D]">
-                    {summary.uniqueServers} Servers | M/M/C Queue
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto bg-white rounded-xl shadow-lg">
-                  <table className="w-full">
-                    <thead className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white">
-                      <tr>
-                        <th className="py-5 px-6 text-left text-xl">Priority Level</th>
-                        <th className="py-5 px-6 text-center text-xl">Customers</th>
-                        <th className="py-5 px-6 text-center text-xl">Avg Wait Time</th>
-                        <th className="py-5 px-6 text-center text-xl">Avg Turnaround Time</th>
-                        <th className="py-5 px-6 text-center text-xl">Avg Service Time</th>
-                        <th className="py-5 px-6 text-center text-xl">Avg Response Time</th>
-                        <th className="py-5 px-6 text-center text-xl">% of Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
-                        <tr key={priorityKey} className="border-b hover:bg-gray-50 transition">
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-3">
-                              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${priorityKey === 'priority1' ? 'bg-[#6D9197]' :
-                                priorityKey === 'priority2' ? 'bg-[#2F575D]' :
-                                  'bg-[#28363D]'
-                                }`}>
-                                {priorityKey.replace('priority', '')}
-                              </span>
-                              <span className="text-lg font-semibold">
-                                {priorityKey === 'priority1' ? 'High Priority' :
-                                  priorityKey === 'priority2' ? 'Medium Priority' :
-                                    'Low Priority'}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <div className="text-2xl font-bold">{data.count}</div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <div className="text-2xl font-bold text-[#6D9197]">{data.avgWait}</div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <div className="text-2xl font-bold text-[#2F575D]">{data.avgTAT}</div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <div className="text-2xl font-bold text-[#28363D]">{data.avgService}</div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <div className="text-2xl font-bold text-[#6D9197]">{data.avgResponse}</div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <div className="text-2xl font-bold">{data.percentage}%</div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
             {/* Performance Insights - M/M/C */}
             <div className="mt-12">
-              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Performance Insights</h3>
+              <h3 className="text-2xl font-bold mb-6 text-[#0C3E72]">Performance Insights</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#6D9197] shadow">
-                  <h4 className="text-xl font-bold text-[#2F575D] mb-4">System Efficiency</h4>
+                <div className="p-6 bg-gradient-to-br from-[#f0f6ff] to-white rounded-2xl border border-[#2C80D3] shadow">
+                  <h4 className="text-xl font-bold text-[#0C3E72] mb-4">System Efficiency</h4>
                   <div className="space-y-4">
                     {Array.from({ length: numServers }, (_, idx) => idx + 1).map((serverNum) => (
                       <div key={serverNum} className="flex justify-between items-center">
                         <span className="text-lg">Server {serverNum} Utilization:</span>
-                        <span className="text-2xl font-bold text-[#6D9197]">{calculateServerUtilization(result.ganttChart, serverNum)}%</span>
+                        <span className="text-2xl font-bold text-[#2C80D3]">{calculateServerUtilization(result.ganttChart, serverNum)}%</span>
                       </div>
                     ))}
                     <div className="flex justify-between items-center">
                       <span className="text-lg">Avg Customer Throughput:</span>
-                      <span className="text-2xl font-bold text-[#28363D]">
+                      <span className="text-2xl font-bold text-[#091d3a]">
                         {((summary.totalCustomers / (result?.table[result.table.length - 1]?.endTime || 1)).toFixed(2))}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#2F575D] shadow">
-                  <h4 className="text-xl font-bold text-[#2F575D] mb-4">Priority Analysis</h4>
+                <div className="p-6 bg-gradient-to-br from-[#f0f6ff] to-white rounded-2xl border border-[#0C3E72] shadow">
+                  <h4 className="text-xl font-bold text-[#0C3E72] mb-4">Queue Analysis</h4>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="text-lg">Priority Levels:</span>
-                      <span className="text-2xl font-bold text-[#28363D]">{summary.uniquePriorities}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
                       <span className="text-lg">Total Processes:</span>
-                      <span className="text-2xl font-bold text-[#6D9197]">{summary.totalCustomers}</span>
+                      <span className="text-2xl font-bold text-[#2C80D3]">{summary.totalCustomers}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-lg">Number of Servers:</span>
-                      <span className="text-2xl font-bold text-[#2F575D]">{summary.uniqueServers}</span>
+                      <span className="text-2xl font-bold text-[#0C3E72]">{summary.uniqueServers}</span>
                     </div>
                   </div>
                 </div>

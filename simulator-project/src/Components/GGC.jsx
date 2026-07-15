@@ -293,7 +293,7 @@ const GGC = () => {
       title: "Utilization (ρ)",
       value: results.rho,
       description: "System utilization factor",
-      gradient: "from-[#6D9197] to-[#2F575D]",
+      gradient: "from-[#2C80D3] to-[#0C3E72]",
       calculation: results.calcRho,
       formula: results.formulaRho
     },
@@ -301,7 +301,7 @@ const GGC = () => {
       title: "Ca² (Arrival)",
       value: results.ca2,
       description: "Arrival coefficient of variation",
-      gradient: "from-[#2F575D] to-[#28363D]",
+      gradient: "from-[#0C3E72] to-[#091d3a]",
       calculation: results.calcCa2,
       formula: results.formulaCa2
     },
@@ -309,7 +309,7 @@ const GGC = () => {
       title: "Cs² (Service)",
       value: results.cs2,
       description: "Service coefficient of variation",
-      gradient: "from-[#28363D] to-[#6D9197]",
+      gradient: "from-[#091d3a] to-[#2C80D3]",
       calculation: results.calcCs2,
       formula: results.formulaCs2
     },
@@ -317,7 +317,7 @@ const GGC = () => {
       title: "Avg Queue Length (Lq)",
       value: results.Lq,
       description: "Customers waiting in queue",
-      gradient: "from-[#6D9197] to-[#2F575D]",
+      gradient: "from-[#2C80D3] to-[#0C3E72]",
       calculation: results.calcLq,
       formula: results.formulaLq
     },
@@ -325,7 +325,7 @@ const GGC = () => {
       title: "Avg in System (L)",
       value: results.L,
       description: "Total customers in system",
-      gradient: "from-[#2F575D] to-[#28363D]",
+      gradient: "from-[#0C3E72] to-[#091d3a]",
       calculation: results.calcL,
       formula: results.formulaL
     },
@@ -333,7 +333,7 @@ const GGC = () => {
       title: "Avg Wait Time (Wq)",
       value: results.Wq,
       description: "Time spent in queue",
-      gradient: "from-[#28363D] to-[#6D9197]",
+      gradient: "from-[#091d3a] to-[#2C80D3]",
       calculation: results.calcWq,
       formula: results.formulaWq
     },
@@ -341,7 +341,7 @@ const GGC = () => {
       title: "Avg System Time (W)",
       value: results.W,
       description: "Total time in system",
-      gradient: "from-[#6D9197] to-[#2F575D]",
+      gradient: "from-[#2C80D3] to-[#0C3E72]",
       calculation: results.calcW,
       formula: results.formulaW
     },
@@ -349,14 +349,14 @@ const GGC = () => {
       title: "Idle Probability",
       value: results.idle,
       description: "Probability server is idle",
-      gradient: "from-[#2F575D] to-[#28363D]",
+      gradient: "from-[#0C3E72] to-[#091d3a]",
       calculation: results.calcIdle,
       formula: results.formulaIdle
     }
   ] : [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f3f7f8] to-[#e8f0f2] p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#f0f5fa] to-[#e1ecf7] p-4 md:p-8">
       {/* Tabs */}
       <div className="max-w-6xl mx-auto mb-8">
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -365,7 +365,7 @@ const GGC = () => {
               onClick={() => setTab("form")}
               className={`flex-1 py-4 text-center font-bold text-lg transition ${
                 tab === "form" 
-                  ? "bg-[#6D9197] text-white" 
+                  ? "bg-[#2C80D3] text-white" 
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
@@ -375,7 +375,7 @@ const GGC = () => {
               onClick={() => results && setTab("results")}
               className={`flex-1 py-4 text-center font-bold text-lg transition ${
                 tab === "results" 
-                  ? "bg-[#2F575D] text-white" 
+                  ? "bg-[#0C3E72] text-white" 
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               } ${!results && "opacity-50 cursor-not-allowed"}`}
               disabled={!results}
@@ -386,7 +386,7 @@ const GGC = () => {
               onClick={() => simResult && setTab("simulation")}
               className={`flex-1 py-4 text-center font-bold text-lg transition ${
                 tab === "simulation"
-                  ? "bg-[#28363D] text-white"
+                  ? "bg-[#091d3a] text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               } ${!simResult && "opacity-50 cursor-not-allowed"}`}
               disabled={!simResult}
@@ -399,14 +399,14 @@ const GGC = () => {
 {/* Form Tab */}
 {tab === "form" && (
   <div className="p-8">
-    <h2 className="text-3xl font-bold text-center text-[#2F575D] mb-8">
+    <h2 className="text-3xl font-bold text-center text-[#0C3E72] mb-8">
       G/G/C Queue Parameters
     </h2>
     
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       {/* Number of Servers */}
       <div className="group">
-        <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+        <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
           Servers (C)
         </label>
         <input
@@ -414,7 +414,7 @@ const GGC = () => {
           value={servers}
           onChange={(e) => setServers(e.target.value)}
           className="w-full px-6 py-4 text-xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                   border-2 border-[#28363D]/30 rounded-2xl focus:border-[#28363D] focus:ring-4 focus:ring-[#28363D]/20 
+                   border-2 border-[#091d3a]/30 rounded-2xl focus:border-[#091d3a] focus:ring-4 focus:ring-[#091d3a]/20 
                    transition-all duration-300 shadow-inner"
           placeholder="e.g., 2"
           min="1"
@@ -426,7 +426,7 @@ const GGC = () => {
 
       {/* Distribution Type - Single dropdown */}
       <div className="group">
-        <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+        <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
           Distribution Type
         </label>
         <select
@@ -455,7 +455,7 @@ const GGC = () => {
             }
           }}
           className="w-full px-6 py-4 text-xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                   border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20 
+                   border-2 border-[#0C3E72]/30 rounded-2xl focus:border-[#0C3E72] focus:ring-4 focus:ring-[#0C3E72]/20 
                    transition-all duration-300 shadow-inner"
         >
           <option value="uniform">Uniform</option>
@@ -475,7 +475,7 @@ const GGC = () => {
       <ExcelDataLoader onDataReady={setExcelInputs} />
       {excelInputs && (
         <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white border border-gray-200 rounded-2xl px-5 py-4 shadow-sm">
-          <p className="text-sm text-[#2F575D] font-medium">
+          <p className="text-sm text-[#0C3E72] font-medium">
             ✅ Excel data loaded — {excelInputs.arrivalTimes.length} patients. Clicking &quot;Run Simulation&quot; will run a multi-server simulation instead of the analytical formula.
           </p>
           <button
@@ -491,14 +491,14 @@ const GGC = () => {
 
     {/* Arrival Parameters Section */}
     <div className="mb-8 p-6 bg-gradient-to-r from-gray-50 to-white rounded-2xl shadow border border-gray-200">
-      <h3 className="text-xl font-bold text-[#2F575D] mb-4">
+      <h3 className="text-xl font-bold text-[#0C3E72] mb-4">
         Arrival Parameters ({distribution.charAt(0).toUpperCase() + distribution.slice(1)} Distribution)
       </h3>
       
       {distribution === 'uniform' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Min Arrival Time
             </label>
             <input
@@ -506,13 +506,13 @@ const GGC = () => {
               step="0.01"
               value={arrivalMin}
               onChange={(e) => setArrivalMin(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#6D9197]/30 rounded-lg focus:border-[#6D9197] focus:ring-2 focus:ring-[#6D9197]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#2C80D3]/30 rounded-lg focus:border-[#2C80D3] focus:ring-2 focus:ring-[#2C80D3]/20 transition"
               placeholder="e.g., 1.5"
             />
             <p className="mt-1 text-xs text-gray-600">Minimum inter-arrival time (recommended: 1.5-2)</p>
           </div>
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Max Arrival Time
             </label>
             <input
@@ -520,7 +520,7 @@ const GGC = () => {
               step="0.01"
               value={arrivalMax}
               onChange={(e) => setArrivalMax(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#2F575D]/30 rounded-lg focus:border-[#2F575D] focus:ring-2 focus:ring-[#2F575D]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#0C3E72]/30 rounded-lg focus:border-[#0C3E72] focus:ring-2 focus:ring-[#0C3E72]/20 transition"
               placeholder="e.g., 3.0"
             />
             <p className="mt-1 text-xs text-gray-600">Maximum inter-arrival time (recommended: 3-4)</p>
@@ -529,7 +529,7 @@ const GGC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Arrival Mean
             </label>
             <input
@@ -537,13 +537,13 @@ const GGC = () => {
               step="0.01"
               value={arrivalMean}
               onChange={(e) => setArrivalMean(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#6D9197]/30 rounded-lg focus:border-[#6D9197] focus:ring-2 focus:ring-[#6D9197]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#2C80D3]/30 rounded-lg focus:border-[#2C80D3] focus:ring-2 focus:ring-[#2C80D3]/20 transition"
               placeholder="e.g., 2.5"
             />
             <p className="mt-1 text-xs text-gray-600">Mean inter-arrival time (recommended: 2-3)</p>
           </div>
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Arrival Variance
             </label>
             <input
@@ -551,7 +551,7 @@ const GGC = () => {
               step="0.01"
               value={arrivalVariance}
               onChange={(e) => setArrivalVariance(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#2F575D]/30 rounded-lg focus:border-[#2F575D] focus:ring-2 focus:ring-[#2F575D]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#0C3E72]/30 rounded-lg focus:border-[#0C3E72] focus:ring-2 focus:ring-[#0C3E72]/20 transition"
               placeholder="e.g., 0.5"
             />
             <p className="mt-1 text-xs text-gray-600">Variance of inter-arrival time (recommended: 0.3-0.8)</p>
@@ -562,14 +562,14 @@ const GGC = () => {
 
     {/* Service Parameters Section */}
     <div className="mb-8 p-6 bg-gradient-to-r from-gray-50 to-white rounded-2xl shadow border border-gray-200">
-      <h3 className="text-xl font-bold text-[#2F575D] mb-4">
+      <h3 className="text-xl font-bold text-[#0C3E72] mb-4">
         Service Parameters ({distribution.charAt(0).toUpperCase() + distribution.slice(1)} Distribution)
       </h3>
       
       {distribution === 'uniform' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Min Service Time
             </label>
             <input
@@ -577,13 +577,13 @@ const GGC = () => {
               step="0.01"
               value={serviceMin}
               onChange={(e) => setServiceMin(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#6D9197]/30 rounded-lg focus:border-[#6D9197] focus:ring-2 focus:ring-[#6D9197]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#2C80D3]/30 rounded-lg focus:border-[#2C80D3] focus:ring-2 focus:ring-[#2C80D3]/20 transition"
               placeholder="e.g., 0.8"
             />
             <p className="mt-1 text-xs text-gray-600">Minimum service time (recommended: 0.8-1.2)</p>
           </div>
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Max Service Time
             </label>
             <input
@@ -591,7 +591,7 @@ const GGC = () => {
               step="0.01"
               value={serviceMax}
               onChange={(e) => setServiceMax(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#2F575D]/30 rounded-lg focus:border-[#2F575D] focus:ring-2 focus:ring-[#2F575D]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#0C3E72]/30 rounded-lg focus:border-[#0C3E72] focus:ring-2 focus:ring-[#0C3E72]/20 transition"
               placeholder="e.g., 1.2"
             />
             <p className="mt-1 text-xs text-gray-600">Maximum service time (recommended: 1.2-1.8)</p>
@@ -600,7 +600,7 @@ const GGC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Service Mean
             </label>
             <input
@@ -608,13 +608,13 @@ const GGC = () => {
               step="0.01"
               value={serviceMean}
               onChange={(e) => setServiceMean(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#6D9197]/30 rounded-lg focus:border-[#6D9197] focus:ring-2 focus:ring-[#6D9197]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#2C80D3]/30 rounded-lg focus:border-[#2C80D3] focus:ring-2 focus:ring-[#2C80D3]/20 transition"
               placeholder="e.g., 1.0"
             />
             <p className="mt-1 text-xs text-gray-600">Mean service time (recommended: 0.8-1.2)</p>
           </div>
           <div className="group">
-            <label className="block text-sm font-bold text-[#28363D] mb-3">
+            <label className="block text-sm font-bold text-[#091d3a] mb-3">
               Service Variance
             </label>
             <input
@@ -622,7 +622,7 @@ const GGC = () => {
               step="0.01"
               value={serviceVariance || "0.2"}
               onChange={(e) => setServiceVariance(e.target.value)}
-              className="w-full px-4 py-3 text-lg border-2 border-[#2F575D]/30 rounded-lg focus:border-[#2F575D] focus:ring-2 focus:ring-[#2F575D]/20 transition"
+              className="w-full px-4 py-3 text-lg border-2 border-[#0C3E72]/30 rounded-lg focus:border-[#0C3E72] focus:ring-2 focus:ring-[#0C3E72]/20 transition"
               placeholder="e.g., 0.2"
             />
             <p className="mt-1 text-xs text-gray-600">Variance of service time (recommended: 0.1-0.4)</p>
@@ -637,8 +637,8 @@ const GGC = () => {
         onClick={calculateMetrics}
         disabled={loading}
         className="group relative px-12 py-6 text-2xl font-bold text-white 
-                 bg-gradient-to-r from-[#6D9197] via-[#2F575D] to-[#28363D] 
-                 rounded-2xl shadow-2xl hover:shadow-[#6D9197]/60 
+                 bg-gradient-to-r from-[#2C80D3] via-[#0C3E72] to-[#091d3a] 
+                 rounded-2xl shadow-2xl hover:shadow-[#2C80D3]/60 
                  transform hover:scale-105 active:scale-95 transition-all duration-500 
                  overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
       >
@@ -650,13 +650,13 @@ const GGC = () => {
         ) : (
           <>
             <span className="relative z-10">{excelInputs ? 'RUN SIMULATION' : 'CALCULATE METRICS'}</span>
-            <div className="absolute inset-0 bg-gradient-to-l from-[#28363D] to-[#6D9197] 
+            <div className="absolute inset-0 bg-gradient-to-l from-[#091d3a] to-[#2C80D3] 
                           opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
           </>
         )}
       </button>
     </div>
-    <p className="mt-4 text-center text-sm font-medium text-[#2F575D]">
+    <p className="mt-4 text-center text-sm font-medium text-[#0C3E72]">
       {excelInputs
         ? 'Will run a patient-by-patient simulation using your Excel data.'
         : 'Will compute analytical G/G/C queueing metrics from the parameters above.'}
@@ -666,25 +666,25 @@ const GGC = () => {
           {/* Results Tab */}
           {tab === "results" && results && (
             <div className="p-8">
-              <h2 className="text-3xl font-bold text-center text-[#2F575D] mb-8">
+              <h2 className="text-3xl font-bold text-center text-[#0C3E72] mb-8">
                 G/G/C Queue Results ({results.distribution.charAt(0).toUpperCase() + results.distribution.slice(1)} Distribution)
               </h2>
 
               {/* Input Summary */}
               <div className="mb-8 p-6 bg-gradient-to-r from-gray-50 to-white rounded-2xl shadow border border-gray-200">
-                <h3 className="text-xl font-bold text-[#2F575D] mb-4">Input Parameters Used</h3>
+                <h3 className="text-xl font-bold text-[#0C3E72] mb-4">Input Parameters Used</h3>
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div className="text-center">
                     <div className="text-sm text-gray-600">Servers (C)</div>
-                    <div className="text-2xl font-bold text-[#28363D]">{results.servers}</div>
+                    <div className="text-2xl font-bold text-[#091d3a]">{results.servers}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">Distribution</div>
-                    <div className="text-xl font-bold text-[#6D9197]">{results.distribution.charAt(0).toUpperCase() + results.distribution.slice(1)}</div>
+                    <div className="text-xl font-bold text-[#2C80D3]">{results.distribution.charAt(0).toUpperCase() + results.distribution.slice(1)}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">Arrival Rate (λ)</div>
-                    <div className="text-2xl font-bold text-[#6D9197]">{results.arrivalRate}</div>
+                    <div className="text-2xl font-bold text-[#2C80D3]">{results.arrivalRate}</div>
                   </div>
                 </div>
                   <div className="text-center text-sm text-gray-500">
@@ -696,7 +696,7 @@ const GGC = () => {
               <div className="flex justify-center mb-8">
                 <button
                   onClick={() => setShowFormula(!showFormula)}
-                  className="px-6 py-3 bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white font-medium rounded-lg hover:opacity-90 transition"
+                  className="px-6 py-3 bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white font-medium rounded-lg hover:opacity-90 transition"
                 >
                   {showFormula ? 'Hide Formulas & Calculations' : 'Show Formulas & Calculations'}
                 </button>
@@ -704,7 +704,7 @@ const GGC = () => {
 
               {/* Horizontal Scrollable Results Cards */}
               <div className="mb-10">
-                <div className="flex overflow-x-auto pb-6 space-x-6 px-2 scrollbar-thin scrollbar-thumb-[#6D9197] scrollbar-track-gray-200">
+                <div className="flex overflow-x-auto pb-6 space-x-6 px-2 scrollbar-thin scrollbar-thumb-[#2C80D3] scrollbar-track-gray-200">
                   {resultsCards.map((card, index) => (
                     <div 
                       key={index} 
@@ -717,7 +717,7 @@ const GGC = () => {
                       
                       {/* Card Body */}
                       <div className="p-6">
-                        <div className="text-4xl font-black text-center text-[#2F575D] mb-3">
+                        <div className="text-4xl font-black text-center text-[#0C3E72] mb-3">
                           {card.value}
                         </div>
                         <p className="text-center text-gray-600 text-sm mb-3">
@@ -758,10 +758,10 @@ const GGC = () => {
               {/* Performance Insights Card */}
               <div className="bg-gradient-to-r from-white to-gray-50 rounded-2xl shadow-lg border border-gray-200 p-6 mb-10">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-2xl font-bold text-[#2F575D]">
+                  <h3 className="text-2xl font-bold text-[#0C3E72]">
                     Performance Insights
                   </h3>
-                  <div className="text-sm bg-[#2F575D] text-white px-3 py-1 rounded-full">
+                  <div className="text-sm bg-[#0C3E72] text-white px-3 py-1 rounded-full">
                     G/G/C Queue
                   </div>
                 </div>
@@ -769,16 +769,16 @@ const GGC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* Utilization Progress */}
                   <div>
-                    <h4 className="text-lg font-semibold text-[#28363D] mb-4">Utilization Analysis</h4>
+                    <h4 className="text-lg font-semibold text-[#091d3a] mb-4">Utilization Analysis</h4>
                     <div className="space-y-4">
                       <div>
                         <div className="flex justify-between mb-2">
                           <span className="font-medium">Utilization: {(parseFloat(results.rho) * 100).toFixed(1)}%</span>
-                          <span className="font-medium text-[#6D9197]">Idle: {(parseFloat(results.idle) * 100).toFixed(1)}%</span>
+                          <span className="font-medium text-[#2C80D3]">Idle: {(parseFloat(results.idle) * 100).toFixed(1)}%</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
                           <div 
-                            className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] h-full rounded-full transition-all duration-1000 flex items-center justify-center"
+                            className="bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] h-full rounded-full transition-all duration-1000 flex items-center justify-center"
                             style={{ width: `${parseFloat(results.rho) * 100}%` }}
                           >
                             <span className="text-white text-sm font-bold">
@@ -833,34 +833,34 @@ const GGC = () => {
                   
                   {/* Performance Insights with Formulas */}
                   <div>
-                    <h4 className="text-lg font-semibold text-[#28363D] mb-4">Performance Summary</h4>
+                    <h4 className="text-lg font-semibold text-[#091d3a] mb-4">Performance Summary</h4>
                     <div className="space-y-4">
                       {[
                         { 
                           label: "Avg Wait in Queue", 
                           value: results.Wq, 
-                          color: "text-[#6D9197]",
+                          color: "text-[#2C80D3]",
                           formula: `Wq = Lq / λ`,
                           calculation: `${results.Lq} / ${results.arrivalRate} = ${results.Wq}`
                         },
                         { 
                           label: "Avg System Time", 
                           value: results.W, 
-                          color: "text-[#2F575D]",
+                          color: "text-[#0C3E72]",
                           formula: `W = Wq + 1/μ`,
                           calculation: `${results.Wq} + 1/${results.serviceRate} = ${results.W}`
                         },
                         { 
                           label: "Queue Length", 
                           value: results.Lq, 
-                          color: "text-[#28363D]",
+                          color: "text-[#091d3a]",
                           formula: `Lq = Lq(M/M/C) × (Ca² + Cs²)/2`,
                           calculation: `${results.calcLqMMC} × (({results.ca2} + {results.cs2})/2) = ${results.Lq}`
                         },
                         { 
                           label: "System Population", 
                           value: results.L, 
-                          color: "text-[#6D9197]",
+                          color: "text-[#2C80D3]",
                           formula: `L = Lq + λ/μ`,
                           calculation: `${results.Lq} + ${results.arrivalRate}/${results.serviceRate} = ${results.L}`
                         }
@@ -899,7 +899,7 @@ const GGC = () => {
               <div className="flex flex-col md:flex-row justify-center gap-6 mt-10">
                 <button
                   onClick={resetForm}
-                  className="px-8 py-4 bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white font-bold rounded-xl hover:shadow-lg transition-all hover:scale-105"
+                  className="px-8 py-4 bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white font-bold rounded-xl hover:shadow-lg transition-all hover:scale-105"
                 >
                   New Calculation
                 </button>
@@ -926,7 +926,7 @@ Results:
                     navigator.clipboard.writeText(text);
                     alert('Results copied to clipboard!');
                   }}
-                  className="px-8 py-4 bg-white border-2 border-[#2F575D] text-[#2F575D] font-bold rounded-xl hover:bg-[#2F575D] hover:text-white transition-all"
+                  className="px-8 py-4 bg-white border-2 border-[#0C3E72] text-[#0C3E72] font-bold rounded-xl hover:bg-[#0C3E72] hover:text-white transition-all"
                 >
                   Copy Results
                 </button>
@@ -938,16 +938,16 @@ Results:
         {/* =============== SIMULATION TABLE TAB (Excel mode) =============== */}
         {tab === "simulation" && simResult && (
           <div className="p-6">
-            <h2 className="text-2xl font-bold text-center text-[#2F575D] mb-2">Simulation Results &mdash; G/G/C</h2>
+            <h2 className="text-2xl font-bold text-center text-[#0C3E72] mb-2">Simulation Results &mdash; G/G/C</h2>
             <p className="text-center text-sm text-gray-500 mb-6">Data source: Excel upload &middot; {simResult.table.length} patients &middot; {parseInt(servers) || 1} server(s) &middot; Utilization: {simResult.utilization}%</p>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {[
-                { label: 'Avg Wait Time', value: (simResult.table.reduce((s, r) => s + r.waitTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#6D9197] to-[#2F575D]' },
-                { label: 'Avg Service Time', value: (simResult.table.reduce((s, r) => s + r.serviceTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#2F575D] to-[#28363D]' },
-                { label: 'Avg Turnaround', value: (simResult.table.reduce((s, r) => s + r.turnaroundTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#28363D] to-[#6D9197]' },
-                { label: 'Utilization', value: simResult.utilization + '%', color: 'from-[#6D9197] to-[#28363D]' },
+                { label: 'Avg Wait Time', value: (simResult.table.reduce((s, r) => s + r.waitTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#2C80D3] to-[#0C3E72]' },
+                { label: 'Avg Service Time', value: (simResult.table.reduce((s, r) => s + r.serviceTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#0C3E72] to-[#091d3a]' },
+                { label: 'Avg Turnaround', value: (simResult.table.reduce((s, r) => s + r.turnaroundTime, 0) / simResult.table.length).toFixed(2) + ' min', color: 'from-[#091d3a] to-[#2C80D3]' },
+                { label: 'Utilization', value: simResult.utilization + '%', color: 'from-[#2C80D3] to-[#091d3a]' },
               ].map((card, i) => (
                 <div key={i} className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 text-white text-center shadow-lg`}>
                   <div className="text-2xl font-black">{card.value}</div>
@@ -960,7 +960,7 @@ Results:
             <div className="overflow-x-auto rounded-2xl shadow border border-gray-200">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-[#28363D] text-white">
+                  <tr className="bg-[#091d3a] text-white">
                     {['#', 'Arrival Time', 'Service Time', 'Start Time', 'End Time', 'Wait Time', 'Turnaround', 'Server'].map(h => (
                       <th key={h} className="px-4 py-3 text-center font-semibold whitespace-nowrap">{h}</th>
                     ))}
@@ -968,16 +968,16 @@ Results:
                 </thead>
                 <tbody>
                   {simResult.table.map((row, i) => (
-                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#f3f7f8]'}>
-                      <td className="px-4 py-2 text-center font-bold text-[#2F575D]">{row.serialNumber}</td>
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-[#f0f5fa]'}>
+                      <td className="px-4 py-2 text-center font-bold text-[#0C3E72]">{row.serialNumber}</td>
                       <td className="px-4 py-2 text-center">{row.arrivalTime}</td>
                       <td className="px-4 py-2 text-center">{row.serviceTime}</td>
                       <td className="px-4 py-2 text-center">{row.startTime}</td>
                       <td className="px-4 py-2 text-center">{row.endTime}</td>
-                      <td className="px-4 py-2 text-center font-medium text-[#6D9197]">{row.waitTime}</td>
+                      <td className="px-4 py-2 text-center font-medium text-[#2C80D3]">{row.waitTime}</td>
                       <td className="px-4 py-2 text-center">{row.turnaroundTime}</td>
                       <td className="px-4 py-2 text-center">
-                        <span className="bg-[#6D9197]/20 text-[#2F575D] font-semibold px-2 py-0.5 rounded-full text-xs">{row.server}</span>
+                        <span className="bg-[#2C80D3]/20 text-[#0C3E72] font-semibold px-2 py-0.5 rounded-full text-xs">{row.server}</span>
                       </td>
                     </tr>
                   ))}
@@ -988,7 +988,7 @@ Results:
             <div className="flex justify-center mt-8 gap-4">
               <button
                 onClick={resetForm}
-                className="px-8 py-3 bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white font-bold rounded-xl hover:shadow-lg transition-all hover:scale-105"
+                className="px-8 py-3 bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white font-bold rounded-xl hover:shadow-lg transition-all hover:scale-105"
               >
                 New Calculation
               </button>
@@ -1003,13 +1003,13 @@ Results:
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md mx-4">
             <div className="flex flex-col items-center">
-              <div className="w-16 h-16 border-4 border-[#6D9197] border-t-transparent rounded-full animate-spin mb-6"></div>
-              <h3 className="text-xl font-bold text-[#2F575D] mb-2">Calculating G/G/C Metrics</h3>
-              <p className="text-[#6D9197] text-center">
+              <div className="w-16 h-16 border-4 border-[#2C80D3] border-t-transparent rounded-full animate-spin mb-6"></div>
+              <h3 className="text-xl font-bold text-[#0C3E72] mb-2">Calculating G/G/C Metrics</h3>
+              <p className="text-[#2C80D3] text-center">
                 Please wait while we compute the queueing model...
               </p>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-6">
-                <div className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] h-full rounded-full animate-[progress_1.5s_linear]"></div>
+                <div className="bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] h-full rounded-full animate-[progress_1.5s_linear]"></div>
               </div>
             </div>
           </div>

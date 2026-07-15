@@ -15,7 +15,7 @@ import GraphAnalytics from './Components/GraphAnalytics';
 
 function App() {
   return (
-    <div className="bg-gray-100 text-gray-900">
+    <div className="bg-slate-50 text-slate-900">
       {/* Navbar */}
       <Navbar />
 

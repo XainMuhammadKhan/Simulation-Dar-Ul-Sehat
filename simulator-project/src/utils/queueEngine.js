@@ -1,6 +1,6 @@
 // src/utils/queueEngine.js
 //
-// One shared engine that turns arrival/service/priority data — whether it
+// One shared engine that turns arrival/service data — whether it
 // came from your random generators or from simulation.xlsx — into the same
 // { table, ganttChart, utilization, serverUtilizations } shape that
 // MM1.jsx, MMCSimulation.jsx, MGCSimulation.jsx and GraphAnalytics.jsx (GGC)
@@ -31,23 +31,13 @@ function excelTimeToMinutes(value) {
   return null;
 }
 
-function normalizePriority(value) {
-  if (value == null) return 1;
-  const v = String(value).trim().toLowerCase();
-  if (v === "high") return 1;
-  if (v === "medium" || v === "med") return 2;
-  if (v === "low") return 3;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 1;
-}
-
 /**
  * Reads an uploaded workbook (e.g. simulation.xlsx) and groups rows by
  * the "Day" column, so the caller can let the user pick which day to run.
  *
  * Expected columns (matches simulation.xlsx):
  *   Day, Patient, Arrival_Time, Service_Start_Time, Service_End_Time,
- *   Interarrival, Interarrival Int, Service Duration, Service Int, Priority
+ *   Interarrival, Interarrival Int, Service Duration, Service Int
  *
  * Returns: { "1": [rawRow, ...], "2": [...], ... }
  */
@@ -72,7 +62,7 @@ export async function parseExcelWorkbook(file) {
 /**
  * Converts one day's raw Excel rows into the plain numeric arrays every
  * scheduler needs: arrivalTimes (elapsed minutes from that day's first
- * arrival), serviceTimes (minutes), priorities (1 = High, 2/3 = Low etc).
+ * arrival), serviceTimes (minutes).
  */
 export function buildInputsFromDayRows(dayRows) {
   const sorted = [...dayRows].sort((a, b) => {
@@ -85,7 +75,6 @@ export function buildInputsFromDayRows(dayRows) {
 
   const arrivalTimes = [];
   const serviceTimes = [];
-  const priorities = [];
 
   sorted.forEach((row) => {
     const arrivalMinutes = excelTimeToMinutes(row.Arrival_Time);
@@ -100,27 +89,22 @@ export function buildInputsFromDayRows(dayRows) {
         ? Number(row["Service Int"])
         : excelTimeToMinutes(row["Service Duration"]);
     serviceTimes.push(+(service || 1).toFixed(2));
-
-    priorities.push(normalizePriority(row.Priority));
   });
 
-  return { arrivalTimes, serviceTimes, priorities };
+  return { arrivalTimes, serviceTimes };
 }
 
 // ============================================================
-// 2. GENERALIZED N-SERVER PRIORITY SCHEDULER
+// 2. GENERALIZED N-SERVER FCFS SCHEDULER
 // ============================================================
 // Non-preemptive: once a customer starts service they run to completion.
-// Ties within the same priority are broken by arrival order (FCFS).
-// This is deliberately general over numServers, unlike GGC's existing
-// calculateScheduleMG2 (hardcoded to 2) — so MMC/MGC can pass any count.
+// Customers are served in arrival order (FCFS).
 
-function scheduleMultiServer(arrivalTimes, serviceTimes, priorities, numServers) {
+function scheduleMultiServer(arrivalTimes, serviceTimes, numServers) {
   const customers = arrivalTimes.map((arrival, id) => ({
     id,
     arrivalTime: arrival,
     serviceTime: serviceTimes[id],
-    priority: priorities[id],
     done: false
   }));
 
@@ -136,9 +120,8 @@ function scheduleMultiServer(arrivalTimes, serviceTimes, priorities, numServers)
         queue.push(c);
       }
     });
-    queue.sort((a, b) =>
-      a.priority === b.priority ? a.arrivalTime - b.arrivalTime : a.priority - b.priority
-    );
+    // FCFS: sort purely by arrival time
+    queue.sort((a, b) => a.arrivalTime - b.arrivalTime);
   };
 
   while (
@@ -168,7 +151,6 @@ function scheduleMultiServer(arrivalTimes, serviceTimes, priorities, numServers)
         ganttChart.push({
           id: customer.id,
           customer_Id: customer.id,
-          priority: customer.priority,
           server: s + 1,
           start,
           end,
@@ -245,7 +227,8 @@ function computePerformanceMeasures(arrivalTimes, ganttChart) {
  * `.toFixed()` calls already in those components).
  */
 export function runQueueSimulation(arrivalTimes, serviceTimes, priorities, numServers = 1) {
-  const ganttChart = scheduleMultiServer(arrivalTimes, serviceTimes, priorities, numServers);
+  // priorities parameter kept for backward compatibility but ignored
+  const ganttChart = scheduleMultiServer(arrivalTimes, serviceTimes, numServers);
   const measures = computePerformanceMeasures(arrivalTimes, ganttChart);
 
   const interArrivals = arrivalTimes.map((t, i) => (i === 0 ? 0 : +(t - arrivalTimes[i - 1]).toFixed(2)));
@@ -258,7 +241,6 @@ export function runQueueSimulation(arrivalTimes, serviceTimes, priorities, numSe
     avgTimeBetweenArrival: meanInterArrival,
     interArrival: interArrivals[i],
     arrivalTime: +at.toFixed(2),
-    priority: priorities[i],
     serviceTime: +serviceTimes[i].toFixed(2),
     startTime: +(measures.startTime[i] ?? at).toFixed(2),
     endTime: +(measures.endingTime[i] ?? at + serviceTimes[i]).toFixed(2),

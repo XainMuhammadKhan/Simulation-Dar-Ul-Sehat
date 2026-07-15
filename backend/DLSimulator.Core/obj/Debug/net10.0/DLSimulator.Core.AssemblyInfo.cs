@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DLSimulator.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+44b67dc4c477c95f41e89ff94a602d6cd16bc7aa")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+965ce13462f6d642b2bad643e9d2c63d01f2ce1a")]
 [assembly: System.Reflection.AssemblyProductAttribute("DLSimulator.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DLSimulator.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

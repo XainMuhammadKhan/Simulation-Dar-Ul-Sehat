@@ -4,7 +4,7 @@ import email from "../assets/email.png";
 
 const Footer = () => {
   return (
-    <footer id="contact" className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white py-8 h-64"> {/* Fixed height */}
+    <footer id="contact" className="bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white py-8 h-64"> {/* Fixed height */}
       
       <div className="container mx-auto px-4 h-full">
         
@@ -13,7 +13,7 @@ const Footer = () => {
           
           {/* Column 1: Simulator Info */}
           <div className="text-center">
-            <h3 className="text-lg font-bold mb-2 text-yellow-200"> Dar-Ul-Sehat Hospital</h3>
+            <h3 className="text-lg font-bold mb-2 text-sky-200"> Dar-Ul-Sehat Hospital</h3>
             <p className="text-gray-200 text-xs leading-relaxed">
               Emergency department queueing analysis for optimal patient flow and resource management.
             </p>
@@ -21,18 +21,18 @@ const Footer = () => {
 
           {/* Column 2: Queueing Models */}
           <div className="text-center">
-            <h4 className="text-md font-semibold mb-2 text-yellow-200"> Models</h4>
+            <h4 className="text-md font-semibold mb-2 text-sky-200"> Models</h4>
             <ul className="space-y-1 text-xs">
-              <li><a href="#mm1" className="text-gray-200 hover:text-yellow-200">M/M/1</a></li>
-              <li><a href="#mmc" className="text-gray-200 hover:text-yellow-200">M/M/C</a></li>
-              <li><a href="#mgc" className="text-gray-200 hover:text-yellow-200">M/G/C</a></li>
-              <li><a href="#priority" className="text-gray-200 hover:text-yellow-200">Priority</a></li>
+              <li><a href="#mm1" className="text-gray-200 hover:text-sky-200">M/M/1</a></li>
+              <li><a href="#mmc" className="text-gray-200 hover:text-sky-200">M/M/C</a></li>
+              <li><a href="#mgc" className="text-gray-200 hover:text-sky-200">M/G/C</a></li>
+              <li><a href="#ggc" className="text-gray-200 hover:text-sky-200">G/G/C</a></li>
             </ul>
           </div>
 
           {/* Column 3: Applications */}
           <div className="text-center">
-            <h4 className="text-md font-semibold mb-2 text-yellow-200"> Uses</h4>
+            <h4 className="text-md font-semibold mb-2 text-sky-200"> Uses</h4>
             <ul className="space-y-1 text-xs">
               <li className="text-gray-200">ER Optimization</li>
               <li className="text-gray-200">Staff Planning</li>
@@ -43,7 +43,7 @@ const Footer = () => {
 
           {/* Column 4: Contact */}
           <div className="text-center">
-            <h4 className="text-md font-semibold mb-2 text-yellow-200"> Research</h4>
+            <h4 className="text-md font-semibold mb-2 text-sky-200"> Research</h4>
             <div className="flex justify-center space-x-3 mb-2">
               <a href="https://github.com/healthcare-research" target="_blank" rel="noreferrer"
                  className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition">
@@ -55,7 +55,7 @@ const Footer = () => {
               </a>
             </div>
             <a href="mailto:team@traumacenter.edu" 
-               className="inline-block bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-semibold transition">
+               className="inline-block bg-sky-500 hover:bg-sky-600 text-white px-3 py-1 rounded text-xs font-semibold transition">
               Contact
             </a>
           </div>
@@ -63,7 +63,7 @@ const Footer = () => {
         </div>
 
         {/* Bottom Copyright Row */}
-        <div className="border-t border-[#6D9197] pt-2 h-1/5">
+        <div className="border-t border-[#2C80D3] pt-2 h-1/5">
           <p className="text-xs text-gray-300 text-center">
             © 2024 Dar-Ul-Sehat Hospital Queueing Simulator | Academic Research Tool
           </p>

@@ -14,19 +14,19 @@ const FeatureSection = () => {
       title: "Real-Time ED Simulation",
       description: "Live visualization of patient flow, waiting times, and resource utilization in emergency departments.",
       icon: featureIcon1,
-      color: "from-[#6D9197] to-[#2F575D]"
+      color: "from-[#2C80D3] to-[#0C3E72]"
     },
     {
-      title: "Medical Priority Queuing",
-      description: "Triage-based priority systems with preemptive scheduling for critical care patients.",
+      title: "Multi-Server Queuing",
+      description: "Advanced FCFS scheduling with multi-server support for efficient patient flow management.",
       icon: featureIcon2,
-      color: "from-[#2F575D] to-[#28363D]"
+      color: "from-[#0C3E72] to-[#091d3a]"
     },
     {
       title: "Healthcare Analytics",
       description: "Comprehensive performance metrics including patient wait times and staff utilization rates.",
       icon: featureIcon3,
-      color: "from-[#28363D] to-[#6D9197]"
+      color: "from-[#091d3a] to-[#2C80D3]"
     }
   ];
 
@@ -34,7 +34,7 @@ const FeatureSection = () => {
     {
       step: "1",
       title: "Configure Hospital Parameters",
-      description: "Set arrival rates, service times, staff allocation, and priority levels for different patient categories.",
+      description: "Set arrival rates, service times, and staff allocation for different patient categories.",
       icon: "⚙️"
     },
     {
@@ -60,12 +60,12 @@ const FeatureSection = () => {
   return (
     <>
       {/* Features Section */}
-      <section ref={featuresRef} id="features" className="py-20 bg-gradient-to-b from-white to-[#f3f7f8]">
+      <section ref={featuresRef} id="features" className="py-20 bg-gradient-to-b from-white to-[#e8f4fd]">
         <div className="container mx-auto px-4">
           <div className={`text-center mb-16 transition-all duration-1000 ${
             featuresVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
           }`}>
-            <h2 className="text-4xl md:text-5xl font-black text-[#2F575D] mb-4">
+            <h2 className="text-4xl md:text-5xl font-black text-[#0C3E72] mb-4">
               Advanced Healthcare Analytics
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
@@ -96,7 +96,7 @@ const FeatureSection = () => {
                       className="w-12 h-12 filter brightness-0 invert"
                     />
                   </div>
-                  <h3 className="text-2xl font-bold text-center text-[#28363D] mb-4">
+                  <h3 className="text-2xl font-bold text-center text-[#091d3a] mb-4">
                     {feature.title}
                   </h3>
                   <p className="text-gray-600 text-center leading-relaxed">
@@ -110,12 +110,12 @@ const FeatureSection = () => {
       </section>
 
       {/* How It Works Section */}
-      <section ref={workflowRef} id="how-it-works" className="py-20 bg-gradient-to-br from-[#28363D] to-[#2F575D] text-white">
+      <section ref={workflowRef} id="how-it-works" className="py-20 bg-gradient-to-br from-[#091d3a] to-[#0C3E72] text-white">
         <div className="container mx-auto px-4">
           <div className={`text-center mb-16 transition-all duration-1000 ${
             workflowVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
           }`}>
-            <h2 className="text-4xl md:text-5xl font-black mb-4 text-yellow-200">
+            <h2 className="text-4xl md:text-5xl font-black mb-4 text-sky-300">
               Emergency Department Workflow
             </h2>
             <p className="text-xl text-gray-200 max-w-3xl mx-auto">
@@ -138,10 +138,10 @@ const FeatureSection = () => {
                   <div className="text-4xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
                     {step.icon}
                   </div>
-                  <div className="w-12 h-12 bg-yellow-400 text-[#28363D] rounded-full flex items-center justify-center text-lg font-bold mx-auto mb-4">
+                  <div className="w-12 h-12 bg-sky-400 text-[#091d3a] rounded-full flex items-center justify-center text-lg font-bold mx-auto mb-4">
                     {step.step}
                   </div>
-                  <h3 className="text-xl font-bold text-yellow-200 mb-4">
+                  <h3 className="text-xl font-bold text-sky-300 mb-4">
                     {step.title}
                   </h3>
                   <p className="text-gray-200 leading-relaxed">
@@ -156,8 +156,8 @@ const FeatureSection = () => {
           <div className={`text-center mt-16 transition-all duration-1000 delay-500 ${
             workflowVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'
           }`}>
-            <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-yellow-200/30 max-w-4xl mx-auto">
-              <h3 className="text-3xl font-black text-yellow-200 mb-4">
+            <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 border border-sky-300/30 max-w-4xl mx-auto">
+              <h3 className="text-3xl font-black text-sky-300 mb-4">
                 Ready to Optimize Your Emergency Department?
               </h3>
               <p className="text-xl text-gray-200 mb-6">
@@ -165,7 +165,7 @@ const FeatureSection = () => {
               </p>
               <a
                 href="/simulation"
-                className="inline-block bg-yellow-400 text-[#28363D] px-8 py-4 rounded-2xl font-bold text-lg hover:bg-yellow-300 transform hover:scale-105 transition-all duration-300 shadow-2xl"
+                className="inline-block bg-sky-400 text-[#091d3a] px-8 py-4 rounded-2xl font-bold text-lg hover:bg-sky-300 transform hover:scale-105 transition-all duration-300 shadow-2xl"
               >
                 Launch Simulator
               </a>

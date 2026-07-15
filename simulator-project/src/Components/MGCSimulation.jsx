@@ -34,11 +34,8 @@ function factorial(n) {
   return n <= 1 ? 1 : n * factorial(n - 1);
 }
 
-// M/G/N Queue Simulator with Priority — generalized over any number of
-// servers (previously this only handled 1 or exactly 2 via separate
-// hardcoded functions; a "Number of Servers = 3+" run would silently only
-// ever schedule on the first two).
-function calculateScheduleMG(arr, serv, prio, numServers = 1) {
+// M/G/N Queue Simulator — generalized over any number of servers (FCFS)
+function calculateScheduleMG(arr, serv, numServers = 1) {
   const gantt = [];
   let t = 0;
   const q = [];
@@ -46,7 +43,6 @@ function calculateScheduleMG(arr, serv, prio, numServers = 1) {
     id: i,
     arr: a,
     rem: serv[i],
-    prio: prio[i],
     completed: false,
     startTime: null
   }));
@@ -65,8 +61,8 @@ function calculateScheduleMG(arr, serv, prio, numServers = 1) {
       .filter((c) => c.arr <= t && !c.completed && !q.some((x) => x.id === c.id))
       .forEach((c) => q.push(c));
 
-    // Sort queue by priority (lower number = higher priority)
-    q.sort((a, b) => a.prio - b.prio);
+    // Sort queue by arrival time (FCFS)
+    q.sort((a, b) => a.arr - b.arr);
 
     // Check if any server is idle and can start a new process
     for (let s = 0; s < numServers; s++) {
@@ -81,7 +77,6 @@ function calculateScheduleMG(arr, serv, prio, numServers = 1) {
 
         gantt.push({
           id: c.id,
-          prio: c.prio,
           server: s + 1,
           start: +t.toFixed(2),
           end: +(t + serve).toFixed(2),
@@ -97,67 +92,24 @@ function calculateScheduleMG(arr, serv, prio, numServers = 1) {
       }
     }
 
-    // Check for preemption if a higher priority process arrives
-    if (q.length > 0) {
-      for (let s = 0; s < numServers; s++) {
-        if (currentProcess[s] && q[0].prio < currentProcess[s].prio) {
-          const preemptedProcess = currentProcess[s];
-          const preemptTime = t;
-
-          const lastGanttEntry = gantt.filter((g) => g.server === s + 1).pop();
-          if (lastGanttEntry && lastGanttEntry.id === preemptedProcess.id && !lastGanttEntry.preempted) {
-            lastGanttEntry.end = +preemptTime.toFixed(2);
-            lastGanttEntry.dur = +(preemptTime - lastGanttEntry.start).toFixed(2);
-            lastGanttEntry.preempted = true;
-          }
-
-          preemptedProcess.rem = serverAvailableTime[s] - preemptTime;
-          preemptedProcess.completed = false;
-
-          q.push(preemptedProcess);
-
-          serverAvailableTime[s] = preemptTime;
-          currentProcess[s] = null;
-
-          gantt.push({
-            id: -2, // Special ID for preemption indicator
-            prio: 0,
-            server: s + 1,
-            start: +preemptTime.toFixed(2),
-            end: +preemptTime.toFixed(2),
-            dur: 0,
-            preempted: true,
-            idle: false
-          });
-        }
-      }
-    }
-
-    // If servers are busy, find the next event time
     if (currentProcess.some((p) => p !== null)) {
       const nextCompletion = Math.min(
         ...currentProcess.map((p, i) => (p ? serverAvailableTime[i] : Infinity))
       );
-
       const nextArrival = cust.find((c) => !c.completed && c.arr > t)?.arr || Infinity;
-
       t = Math.min(nextCompletion, nextArrival);
 
       for (let s = 0; s < numServers; s++) {
-        if (currentProcess[s] && serverAvailableTime[s] <= t) {
-          currentProcess[s] = null;
-        }
+        if (currentProcess[s] && serverAvailableTime[s] <= t) currentProcess[s] = null;
       }
     } else if (q.length === 0) {
       const nextArrivals = cust.filter((c) => !c.completed && c.arr > t);
       if (nextArrivals.length > 0) {
         const nextArrivalTime = Math.min(...nextArrivals.map((c) => c.arr));
-
         for (let s = 0; s < numServers; s++) {
           if (nextArrivalTime > t && serverAvailableTime[s] <= t) {
             gantt.push({
-              id: -1, // -1 indicates idle time
-              prio: 0,
+              id: -1,
               server: s + 1,
               start: +t.toFixed(2),
               end: +nextArrivalTime.toFixed(2),
@@ -167,247 +119,24 @@ function calculateScheduleMG(arr, serv, prio, numServers = 1) {
             });
           }
         }
-
         t = nextArrivalTime;
       } else {
         break;
       }
-    } else {
-      // At least one server idle but nothing suitable to assign — nudge time forward
-      t += 0.01;
     }
   }
 
   return gantt;
 }
 
-function generateCummulativeProbability(lambda, distributionType, params, priorityParams = null, numServers = 1) {
-  const arrivalTime = [];
-  const serviceTime = [];
-  const startTime = [];
-  const endingTime = [];
-  const waitingTime = [];
-  const turnAroundTime = [];
-  let priority = [];
-  let table = [];
-  const cpValues = [];
-  const cpLookup = [];
-  const interArrival = [];
-  const avgTimeBetweenArrival = [];
-  const server = [];
-
-  // ========== FIXED CP GENERATION ==========
-  const maxIterations = 5000;
-  cpValues.length = 0;
-  cpLookup.length = 0;
-
-  // For large lambda, use Normal approximation instead of Poisson
-  let cp = 0;
-  let count = 0;
-
-  if (lambda > 50) {
-    // For large lambda, use exponential distribution for inter-arrival times directly
-    const numCustomers = 500;
-
-    let inter = [0];
-    for (let i = 1; i < numCustomers; i++) {
-      const u = Math.random();
-      const time = -Math.log(1 - u) / lambda;
-      inter.push(Math.round(time * 100) / 100);
-    }
-
-    for (let i = 0; i < numCustomers; i++) {
-      cpLookup[i] = i / numCustomers;
-      cpValues[i] = (i + 1) / numCustomers;
-    }
-
-    let currentArrival = 0;
-    arrivalTime.push(0);
-    for (let i = 1; i < inter.length; i++) {
-      currentArrival += inter[i];
-      arrivalTime.push(Math.round(currentArrival * 100) / 100);
-    }
-
-    interArrival.push(...inter);
-
-    for (let i = 0; i < numCustomers; i++) {
-      let st;
-
-      if (distributionType === "uniform") {
-        let r = Math.random();
-        st = Math.round(params.a + (params.b - params.a) * r);
-      } else {
-        let r1 = Math.random();
-        let r2 = Math.random();
-        st = Math.round(
-          params.u +
-          params.sd *
-          Math.sqrt(-2 * Math.log(r1)) *
-          Math.cos(2 * Math.PI * r2)
-        );
-      }
-
-      serviceTime.push(st < 1 ? 1 : st);
-    }
-
-  } else {
-    // Original method for small lambda
-    while (cp < 0.999999 && count < maxIterations) {
-      let calc;
-
-      if (lambda > 10) {
-        const logCalc = -lambda + count * Math.log(lambda);
-        let logFact = 0;
-        for (let i = 2; i <= count; i++) {
-          logFact += Math.log(i);
-        }
-        calc = Math.exp(logCalc - logFact);
-      } else {
-        calc = Math.exp(-lambda) * Math.pow(lambda, count) / factorial(count);
-      }
-
-      cpLookup[count] = cp;
-      cp = cp + calc;
-      cpValues[count] = cp;
-
-      if (calc < 1e-10) {
-        cpValues[count] = 1;
-        break;
-      }
-
-      count++;
-    }
-
-    if (cpValues.length > 0) {
-      cpValues[cpValues.length - 1] = 1;
-      cpLookup[cpValues.length] = 1;
-    }
-
-    const numCustomers = cpValues.length;
-    for (let i = 0; i < numCustomers; i++) {
-      let st;
-
-      if (distributionType === "uniform") {
-        let r = Math.random();
-        st = Math.round(params.a + (params.b - params.a) * r);
-      } else {
-        let r1 = Math.random();
-        let r2 = Math.random();
-        st = Math.round(
-          params.u +
-          params.sd *
-          Math.sqrt(-2 * Math.log(r1)) *
-          Math.cos(2 * Math.PI * r2)
-        );
-      }
-
-      serviceTime.push(st < 1 ? 1 : st);
-    }
-
-    let inter = [0];
-    for (let i = 1; i < numCustomers; i++) {
-      let r = Math.random();
-      let found = false;
-      for (let j = 1; j < cpLookup.length; j++) {
-        if (cpLookup[j - 1] <= r && r < cpLookup[j]) {
-          inter.push(j);
-          found = true;
-          break;
-        }
-      }
-      if (!found) inter.push(1);
-    }
-
-    let currentArrival = 0;
-    arrivalTime.push(0);
-    for (let i = 1; i < inter.length; i++) {
-      currentArrival += inter[i];
-      arrivalTime.push(currentArrival);
-    }
-
-    interArrival.push(...inter);
-  }
-  // ========== END FIXED CP GENERATION ==========
-
-  const numCustomers = arrivalTime.length;
-  if (priorityParams) {
-    priority = [];
-    for (let i = 0; i < numCustomers; i++) {
-      let r = Math.random();
-      priority.push(
-        Math.round(priorityParams.a + r * (priorityParams.b - priorityParams.a))
-      );
-    }
-  } else {
-    priority = Array(numCustomers).fill(1);
-  }
-
-  for (let i = 0; i < arrivalTime.length; i++) {
-    avgTimeBetweenArrival.push(i);
-  }
-
-  // Generalized N-server scheduler — no more 1-vs-2 branching.
-  const gantt = calculateScheduleMG(arrivalTime, serviceTime, priority, numServers);
-
-  performanceMeasures(arrivalTime, serviceTime, gantt, startTime, endingTime, waitingTime, turnAroundTime, server);
-
-  const totalServiceTime = serviceTime.reduce((a, b) => a + b, 0);
-  const makespan = gantt.length > 0 ? gantt[gantt.length - 1]?.end || 1 : 1;
-
-  const serverUtilizations = calculateServerUtilizations(gantt, numServers, makespan);
-  const overallUtil = ((totalServiceTime / (makespan * numServers)) * 100).toFixed(1);
-
-  table = [];
-  for (let i = 0; i < numCustomers; i++) {
-    table.push({
-      serialNumber: i + 1,
-      cpLookup: cpLookup[i] || 0,
-      cp: cpValues[i] || (i + 1) / numCustomers,
-      avgTimeBetweenArrival: avgTimeBetweenArrival[i] || 0,
-      interArrival: interArrival[i] || 0,
-      arrivalTime: arrivalTime[i] || 0,
-      serviceTime: serviceTime[i] || 0,
-      startTime: startTime[i] || 0,
-      endTime: endingTime[i] || 0,
-      turnaroundTime: turnAroundTime[i] || 0,
-      waitTime: waitingTime[i] || 0,
-      responseTime: waitingTime[i] || 0,
-      server: server[i] ? `Server ${server[i]}` : "Server 1",
-      priority: priority[i] || 1
-    });
-  }
-
-  return {
-    table,
-    ganttChart: gantt,
-    utilization: overallUtil,
-    serverUtilizations
-  };
-}
-
-function calculateServerUtilizations(gantt, numServers, makespan) {
-  const utilizations = {};
-
-  for (let s = 1; s <= numServers; s++) {
-    const serverSegments = gantt.filter(seg => seg.server === s && !seg.idle);
-    const totalBusyTime = serverSegments.reduce((sum, seg) => sum + seg.dur, 0);
-    const utilization = (totalBusyTime / makespan) * 100;
-    utilizations[`server${s}`] = utilization.toFixed(1);
-  }
-
-  return utilizations;
-}
-
-function performanceMeasures(arr, serv, gantt, startTime, endingTime, waitingTime, turnAroundTime, server) {
+function performanceMeasures(arr, serv, gantt, startTime, endingTime, waitingTime, turnaroundTime, server) {
   const first = {};
   const last = {};
 
-  // Filter out idle segments for performance calculation
-  const processSegments = gantt.filter(seg => !seg.idle && seg.id >= 0);
-
-  processSegments.forEach((s) => {
-    if (!first[s.id] || s.start < first[s.id]) first[s.id] = s.start;
-    if (!last[s.id] || s.end > last[s.id]) last[s.id] = s.end;
+  gantt.forEach((s) => {
+    if (s.id < 0) return;
+    if (first[s.id] === undefined) first[s.id] = s.start;
+    last[s.id] = s.end;
   });
 
   Object.keys(first).forEach((id) => {
@@ -416,18 +145,102 @@ function performanceMeasures(arr, serv, gantt, startTime, endingTime, waitingTim
     endingTime[i] = last[id];
     const tat = last[id] - arr[i];
     waitingTime[i] = tat - serv[i];
-    turnAroundTime[i] = tat;
-    server[i] = gantt.find(g => g.id === i)?.server || 1;
+    turnaroundTime[i] = tat;
+    server[i] = gantt.find((g) => g.id === i)?.server || 1;
   });
+}
+
+function generateCummulativeProbability(lambda, type, distParams, numServers) {
+  let cp = 0, cplookup = 0, count = 0;
+  const cparray = [];
+  const cplookuparray = [];
+
+  while (cp <= 0.999999999999999) {
+    const calc = (Math.exp(-lambda) * Math.pow(lambda, count)) / factorial(count);
+    cplookup = cp;
+    cplookuparray[count] = cplookup;
+    cp = calc + cplookup;
+    cparray[count] = cp;
+    count++;
+    if (count > 500) break;
+  }
+
+  const cpValues = [...cparray];
+  const cpLookup = [...cplookuparray];
+
+  const serviceTime = [];
+  for (let i = 0; i < cpLookup.length; i++) {
+    let st;
+    if (type === "uniform") {
+      st = distParams.a + Math.random() * (distParams.b - distParams.a);
+    } else {
+      const u1 = Math.random();
+      const u2 = Math.random();
+      const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      st = distParams.u + distParams.sd * z0;
+    }
+    st = Math.round(Math.max(0.1, st));
+    serviceTime.push(st < 1 ? 1 : st);
+  }
+
+  const inter = [0];
+  for (let i = 1; i < cpLookup.length; i++) {
+    const r = Math.random();
+    let found = false;
+    for (let j = 1; j < cpLookup.length; j++) {
+      if (cpLookup[j - 1] <= r && r < cpLookup[j]) {
+        inter.push(j);
+        found = true;
+        break;
+      }
+    }
+    if (!found) inter.push(0);
+  }
+
+  const arrivalTime = inter.reduce((a, c, i) => [...a, i === 0 ? 0 : a[i - 1] + c], []);
+  const interArrival = [...inter];
+  const avgTimeBetweenArrival = arrivalTime.map((_, i) => i);
+
+  const startTime = [], endingTime = [], waitingTime = [], turnaroundTime = [], server = [];
+  const gantt = calculateScheduleMG(arrivalTime, serviceTime, numServers);
+  performanceMeasures(arrivalTime, serviceTime, gantt, startTime, endingTime, waitingTime, turnaroundTime, server);
+
+  const table = arrivalTime.map((at, i) => ({
+    serialNumber: i + 1,
+    cpLookup: cpLookup[i],
+    cp: cpValues[i],
+    avgTimeBetweenArrival: avgTimeBetweenArrival[i],
+    interArrival: interArrival[i],
+    arrivalTime: at,
+    serviceTime: serviceTime[i],
+    startTime: startTime[i] || 0,
+    endTime: endingTime[i] || 0,
+    turnaroundTime: turnaroundTime[i] || 0,
+    waitTime: waitingTime[i] || 0,
+    responseTime: (startTime[i] || 0) - at,
+    server: `Server ${server[i] || 1}`
+  }));
+
+  const makespan = gantt.length > 0 ? Math.max(...gantt.map((g) => g.end)) : 1;
+  const totalService = serviceTime.reduce((a, b) => a + b, 0);
+  const utilization = +(((totalService / (makespan * numServers)) * 100).toFixed(1));
+
+  const serverUtilizations = {};
+  for (let s = 1; s <= numServers; s++) {
+    const busy = gantt
+      .filter((g) => g.server === s && !g.idle)
+      .reduce((sum, g) => sum + g.dur, 0);
+    serverUtilizations[`server${s}`] = +(((busy / makespan) * 100).toFixed(1));
+  }
+
+  return { table, ganttChart: gantt, utilization, serverUtilizations };
 }
 
 function computeSummary(table, utilization, serverUtilizations = {}) {
   if (!table || table.length === 0) return null;
 
-  // Helper function for average calculation
   const avg = (arr) => (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2);
 
-  // Calculate overall averages
   const overall = {
     utilization,
     serverUtilizations,
@@ -437,56 +250,10 @@ function computeSummary(table, utilization, serverUtilizations = {}) {
     avgResponse: avg(table.map((t) => t.responseTime || 0))
   };
 
-  // Calculate priority-wise averages
-  let priorityWise = {};
-
-  // Get unique priorities
-  const uniquePriorities = [...new Set(table.map(t => t.priority))].sort((a, b) => a - b);
-
-  // Calculate for each priority
-  uniquePriorities.forEach(priority => {
-    const priorityTable = table.filter(t => t.priority === priority);
-
-    priorityWise[`priority${priority}`] = {
-      count: priorityTable.length,
-      avgWait: avg(priorityTable.map(t => t.waitTime || 0)),
-      avgTAT: avg(priorityTable.map(t => t.turnaroundTime || 0)),
-      avgService: avg(priorityTable.map(t => t.serviceTime || 0)),
-      avgResponse: avg(priorityTable.map(t => t.responseTime || 0)),
-      percentage: ((priorityTable.length / table.length) * 100).toFixed(1)
-    };
-  });
-
-  // Calculate server-wise priority distribution (for M/G/C)
-  let serverPriorityDistribution = {};
-  const uniqueServers = [...new Set(table.map(t => t.server))].sort();
-
-  uniqueServers.forEach(server => {
-    const serverTable = table.filter(t => t.server === server);
-    const serverPriorityCount = {};
-
-    uniquePriorities.forEach(priority => {
-      const count = serverTable.filter(t => t.priority === priority).length;
-      if (count > 0) {
-        serverPriorityCount[`priority${priority}`] = {
-          count,
-          percentage: ((count / serverTable.length) * 100).toFixed(1)
-        };
-      }
-    });
-
-    if (Object.keys(serverPriorityCount).length > 0) {
-      serverPriorityDistribution[`server${server}`] = serverPriorityCount;
-    }
-  });
-
   return {
     ...overall,
-    priorityWise,
-    serverPriorityDistribution,
     totalCustomers: table.length,
-    uniquePriorities: uniquePriorities.length,
-    uniqueServers: uniqueServers.length
+    uniqueServers: [...new Set(table.map(t => t.server))].length
   };
 }
 
@@ -498,18 +265,15 @@ export default function MGCSimulation() {
   const [uniformParams, setUniformParams] = useState({ a: 2, b: 8 });
   const [normalParams, setNormalParams] = useState({ u: 5, sd: 2 });
   const [numServers, setNumServers] = useState(2);
-  const [pMin, setPMin] = useState(1);
-  const [pMax, setPMax] = useState(3);
-  const [prioOn, setPrioOn] = useState(true);
   const [result, setResult] = useState(null);
   const [tab, setTab] = useState("form");
   const [chartType, setChartType] = useState("bar");
   const [metric, setMetric] = useState("waiting");
   const [summary, setSummary] = useState(null);
-  const [excelData, setExcelData] = useState(null); // { arrivalTimes, serviceTimes, priorities }
-  const [dataSource, setDataSource] = useState("random"); // "random" | "excel" — reflects the *last run*
+  const [excelData, setExcelData] = useState(null);
+  const [dataSource, setDataSource] = useState("random");
 
-  const themeColors = ["#6D9197", "#2F575D", "#28363D"];
+  const themeColors = ["#2C80D3", "#0C3E72", "#091d3a"];
 
   useEffect(() => {
     setTab("form")
@@ -518,10 +282,11 @@ export default function MGCSimulation() {
   const runSimulation = () => {
     if (excelData) {
       // ---- Run from uploaded Excel data ----
+      const priorities = Array(excelData.arrivalTimes.length).fill(1);
       const data = runQueueSimulation(
         excelData.arrivalTimes,
         excelData.serviceTimes,
-        excelData.priorities,
+        priorities,
         numServers
       );
       setResult(data);
@@ -537,7 +302,6 @@ export default function MGCSimulation() {
       lambda,
       distributionType,
       params,
-      prioOn ? { a: pMin, b: pMax } : null,
       numServers
     );
     setResult(data);
@@ -552,12 +316,6 @@ export default function MGCSimulation() {
   };
 
   const isExcelMode = dataSource === "excel";
-
-  const getPriorityGradient = (prio) => {
-    if (prio === 1) return "bg-gradient-to-br from-[#6D9197] to-[#2F575D]";
-    if (prio === 2) return "bg-gradient-to-br from-[#2F575D] to-[#28363D]";
-    return "bg-gradient-to-br from-[#28363D] to-[#6D9197]";
-  };
 
   const getGanttDataByServer = (ganttChart, serverCount) => {
     const serverData = Array(serverCount).fill(null).map(() => []);
@@ -577,17 +335,16 @@ export default function MGCSimulation() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f7f8]">
+    <div className="min-h-screen bg-[#f0f6ff]">
 
-
-      <nav className="bg-[#28363D] border-b shadow-sm w-full">
+      <nav className="bg-[#091d3a] border-b shadow-sm w-full">
         <div className="flex w-full">
           {["form", "gantt", "table", "graphs", "calc"].map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${
-                tab === t ? "bg-[#6D9197] text-white" : "bg-[#28363D] text-gray-200 hover:bg-[#2F575D]"
+                tab === t ? "bg-[#2C80D3] text-white" : "bg-[#091d3a] text-gray-200 hover:bg-[#0C3E72]"
               } transition`}
             >
               {t === "form" ? "Input Params" : t === "gantt" ? "Gantt" : t === "table" ? "Table" : t === "graphs" ? "Graphs" : "Calculations"}
@@ -596,16 +353,16 @@ export default function MGCSimulation() {
         </div>
       </nav>
 
-      <main>
+      <main className="container mx-auto p-4 md:p-8">
         {/* =============== FORM =============== */}
         {tab === "form" && (
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-4xl mx-auto space-y-8">
             {/* ---- Excel upload block ---- */}
             <div className="mt-8">
               <ExcelDataLoader onDataReady={setExcelData} />
               {excelData && (
-                <div className="max-w-2xl mx-auto -mt-4 mb-6 flex items-center justify-between bg-[#6D9197]/10 border border-[#6D9197]/40 rounded-xl px-6 py-3">
-                  <span className="text-sm font-semibold text-[#2F575D]">
+                <div className="max-w-2xl mx-auto -mt-4 mb-6 flex items-center justify-between bg-[#2C80D3]/10 border border-[#2C80D3]/40 rounded-xl px-6 py-3">
+                  <span className="text-sm font-semibold text-[#0C3E72]">
                     Excel data loaded — {excelData.arrivalTimes.length} customers. Running the
                     simulation will use this data instead of the fields below.
                   </span>
@@ -619,16 +376,16 @@ export default function MGCSimulation() {
               )}
             </div>
 
-            <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 border border-gray-100 mb-8">
-              <h2 className="text-4xl font-extrabold text-center mb-10 text-[#2F575D] tracking-tight">
-                M/G/C Priority Queue — Simulation Setup
+            <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100 mb-8">
+              <h2 className="text-4xl font-extrabold text-center mb-10 text-[#0C3E72] tracking-tight">
+                M/G/C Queue — Simulation Setup
               </h2>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 <div className="lg:col-span-7 space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="group">
-                      <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                      <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                         Arrival Rate (λ)
                       </label>
                       <input
@@ -637,7 +394,7 @@ export default function MGCSimulation() {
                         value={lambda}
                         onChange={(e) => setLambda(+e.target.value)}
                         className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                               border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
+                               border-2 border-[#2C80D3]/30 rounded-2xl focus:border-[#2C80D3] focus:ring-4 focus:ring-[#2C80D3]/20 
                                transition-all duration-300 shadow-inner"
                         placeholder="3.96"
                       />
@@ -645,14 +402,14 @@ export default function MGCSimulation() {
                     </div>
 
                     <div className="group">
-                      <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                      <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                         Service Distribution
                       </label>
                       <select
                         value={distributionType}
                         onChange={(e) => setDistributionType(e.target.value)}
                         className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                               border-2 border-[#2F575D]/30 rounded-2xl focus:border-[#2F575D] focus:ring-4 focus:ring-[#2F575D]/20 
+                               border-2 border-[#0C3E72]/30 rounded-2xl focus:border-[#0C3E72] focus:ring-4 focus:ring-[#0C3E72]/20 
                                transition-all duration-300 shadow-inner"
                       >
                         <option value="uniform">Uniform Distribution</option>
@@ -664,7 +421,7 @@ export default function MGCSimulation() {
                     {distributionType === "uniform" ? (
                       <>
                         <div className="group">
-                          <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                          <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                             Service Min (a)
                           </label>
                           <input
@@ -673,14 +430,14 @@ export default function MGCSimulation() {
                             value={uniformParams.a}
                             onChange={(e) => setUniformParams({...uniformParams, a: +e.target.value})}
                             className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                                   border-2 border-[#28363D]/30 rounded-2xl focus:border-[#28363D] focus:ring-4 focus:ring-[#28363D]/20 
+                                   border-2 border-[#091d3a]/30 rounded-2xl focus:border-[#091d3a] focus:ring-4 focus:ring-[#091d3a]/20 
                                    transition-all duration-300 shadow-inner"
                             placeholder="2"
                           />
                           <p className="mt-2 text-xs text-gray-600 text-center font-medium">Minimum service time</p>
                         </div>
                         <div className="group">
-                          <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                          <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                             Service Max (b)
                           </label>
                           <input
@@ -689,7 +446,7 @@ export default function MGCSimulation() {
                             value={uniformParams.b}
                             onChange={(e) => setUniformParams({...uniformParams, b: +e.target.value})}
                             className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                                   border-2 border-[#28363D]/30 rounded-2xl focus:border-[#28363D] focus:ring-4 focus:ring-[#28363D]/20 
+                                   border-2 border-[#091d3a]/30 rounded-2xl focus:border-[#091d3a] focus:ring-4 focus:ring-[#091d3a]/20 
                                    transition-all duration-300 shadow-inner"
                             placeholder="8"
                           />
@@ -699,7 +456,7 @@ export default function MGCSimulation() {
                     ) : (
                       <>
                         <div className="group">
-                          <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                          <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                             Mean (μ)
                           </label>
                           <input
@@ -708,14 +465,14 @@ export default function MGCSimulation() {
                             value={normalParams.u}
                             onChange={(e) => setNormalParams({...normalParams, u: +e.target.value})}
                             className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                                   border-2 border-[#28363D]/30 rounded-2xl focus:border-[#28363D] focus:ring-4 focus:ring-[#28363D]/20 
+                                   border-2 border-[#091d3a]/30 rounded-2xl focus:border-[#091d3a] focus:ring-4 focus:ring-[#091d3a]/20 
                                    transition-all duration-300 shadow-inner"
                             placeholder="5"
                           />
                           <p className="mt-2 text-xs text-gray-600 text-center font-medium">Average service time</p>
                         </div>
                         <div className="group">
-                          <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                          <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                             Std Dev (σ)
                           </label>
                           <input
@@ -724,7 +481,7 @@ export default function MGCSimulation() {
                             value={normalParams.sd}
                             onChange={(e) => setNormalParams({...normalParams, sd: +e.target.value})}
                             className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                                   border-2 border-[#28363D]/30 rounded-2xl focus:border-[#28363D] focus:ring-4 focus:ring-[#28363D]/20 
+                                   border-2 border-[#091d3a]/30 rounded-2xl focus:border-[#091d3a] focus:ring-4 focus:ring-[#091d3a]/20 
                                    transition-all duration-300 shadow-inner"
                             placeholder="2"
                           />
@@ -736,7 +493,7 @@ export default function MGCSimulation() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="group">
-                      <label className="block text-sm font-bold text-[#28363D] uppercase tracking-wider mb-3">
+                      <label className="block text-sm font-bold text-[#091d3a] uppercase tracking-wider mb-3">
                         Number of Servers
                       </label>
                       <input
@@ -746,89 +503,31 @@ export default function MGCSimulation() {
                         value={numServers}
                         onChange={(e) => setNumServers(Math.max(1, +e.target.value))}
                         className="w-full px-8 py-6 text-2xl font-bold text-center bg-gradient-to-b from-gray-50 to-gray-100 
-                               border-2 border-[#6D9197]/30 rounded-2xl focus:border-[#6D9197] focus:ring-4 focus:ring-[#6D9197]/20 
+                               border-2 border-[#2C80D3]/30 rounded-2xl focus:border-[#2C80D3] focus:ring-4 focus:ring-[#2C80D3]/20 
                                transition-all duration-300 shadow-inner"
                       />
-                      <p className="mt-2 text-xs text-gray-600 text-center font-medium">Select number of servers</p>
-                    </div>
-
-                    <div className="bg-gradient-to-r from-[#6D9197]/10 to-[#2F575D]/10 rounded-3xl p-8 border border-[#6D9197]/20">
-                      <label className="flex items-center justify-center gap-6 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={prioOn}
-                          onChange={(e) => setPrioOn(e.target.checked)}
-                          className="w-12 h-12 rounded-2xl accent-[#6D9197] focus:ring-8 focus:ring-[#6D9197]/30 
-                                 transition-all duration-300 hover:scale-110"
-                        />
-                        <div className="text-center">
-                          <div className="text-3xl font-black text-[#28363D]">
-                            {prioOn ? "Priority Queue: ENABLED" : "Priority Queue: DISABLED"}
-                          </div>
-                          <p className="mt-2 text-sm text-gray-700 font-medium">
-                            Lower number = Higher priority · Preemptive scheduling
-                          </p>
-                        </div>
-                      </label>
+                      <p className="mt-2 text-xs text-gray-600 text-center font-medium">Number of service desks open</p>
                     </div>
                   </div>
-
                 </div>
 
                 <div className="lg:col-span-5 space-y-8">
-                  {prioOn && (
-                    <div className="bg-[#28363D]/5 border-2 border-dashed border-[#28363D]/30 rounded-3xl p-8">
-                      <h3 className="text-2xl font-bold text-center text-[#2F575D] mb-6">Priority Levels</h3>
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="text-center">
-                          <label className="block text-sm font-bold text-green-700 uppercase mb-3">
-                            Highest Priority
-                          </label>
-                          <input
-                            type="number"
-                            value={pMin}
-                            onChange={(e) => setPMin(+e.target.value)}
-                            className="w-full px-6 py-5 text-3xl font-black text-center bg-green-50 border-4 border-green-600 
-                                   rounded-2xl focus:ring-8 focus:ring-green-300 transition-all"
-                            min="1"
-                          />
-                          <p className="mt-2 text-xs text-green-800 font-bold">Lowest Number</p>
-                        </div>
-                        <div className="text-center">
-                          <label className="block text-sm font-bold text-red-700 uppercase mb-3">
-                            Lowest Priority
-                          </label>
-                          <input
-                            type="number"
-                            value={pMax}
-                            onChange={(e) => setPMax(+e.target.value)}
-                            className="w-full px-6 py-5 text-3xl font-black text-center bg-red-50 border-4 border-red-600 
-                                   rounded-2xl focus:ring-8 focus:ring-red-300 transition-all"
-                            min={pMin || 1}
-                          />
-                          <p className="mt-2 text-xs text-red-800 font-bold">Highest Number</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="flex items-center justify-center h-full min-h-48">
                     <div className="w-full max-w-xl">
                       <button
                         onClick={runSimulation}
                         className="group relative w-full px-10 py-10 text-4xl font-extrabold text-white 
-                             bg-gradient-to-r from-[#6D9197] via-[#2F575D] to-[#28363D] 
-                             rounded-3xl shadow-2xl hover:shadow-[#6D9197]/60 
+                             bg-gradient-to-r from-[#2C80D3] via-[#0C3E72] to-[#091d3a] 
+                             rounded-3xl shadow-2xl hover:shadow-[#2C80D3]/60 
                              transform hover:scale-105 active:scale-95 transition-all duration-500 
                              overflow-hidden"
                       >
                         <span className="relative z-10 drop-shadow-2xl">RUN SIMULATION</span>
+                        <div className="absolute inset-0 bg-gradient-to-l from-[#091d3a] to-[#2C80D3] 
+                                  opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                        <div className="absolute -inset-2 bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] 
+                                  blur-2xl opacity-30 group-hover:opacity-70 transition-opacity"></div>
                       </button>
-                      <p className="mt-4 text-center text-sm font-semibold text-[#2F575D]">
-                        {excelData
-                          ? "Will run using the uploaded Excel data."
-                          : "Will run using the parameters above (randomly generated)."}
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -837,93 +536,64 @@ export default function MGCSimulation() {
           </div>
         )}
 
-
         {/* =============== GANTT CHART =============== */}
-        {tab === "gantt" && result && (
+        {tab === "gantt" && result && result.ganttChart && result.ganttChart.length > 0 ? (
           <div className="bg-white rounded-2xl shadow-xl my-8 p-8 border overflow-auto max-w-7xl mx-auto">
-            <h2 className="text-2xl font-bold text-center mb-8 text-[#2F575D]">
+            <h2 className="text-2xl font-bold text-center mb-8 text-[#0C3E72]">
               Gantt Chart
             </h2>
 
             {Array.from({ length: numServers }, (_, serverIndex) => {
-              const serverData = getGanttDataByServer(result.ganttChart, numServers)[serverIndex] || [];
-              const makespan = serverData.length > 0 ?
-                Math.max(...serverData.map(s => s.end)) : 1;
+              const serverNum = serverIndex + 1;
+              const segments = result.ganttChart.filter(seg => seg.server === serverNum);
+              const makespan = segments.length > 0 ? Math.max(...segments.map(s => s.end)) : 1;
 
               return (
-                <div key={serverIndex} className="mb-12">
-                  <h3 className="text-xl font-bold text-center mb-6 text-[#2F575D] bg-[#6D9197] text-white py-3 rounded-lg">
-                    Server {serverIndex + 1}
+                <div key={serverNum} className="mb-12">
+                  <h3 className="text-xl font-bold text-center mb-6 text-white bg-[#2C80D3] py-3 rounded-lg">
+                    Server {serverNum}
                   </h3>
 
-                  <div className="flex gap-4 items-end justify-start min-w-max py-6 bg-gray-50 rounded-xl px-4">
-                    {serverData.map((seg, i) => {
-                      if(seg.dur=== 0) return null;
-                      const widthPercent = Math.max((seg.dur / makespan) * 100, 4);
-                      return (
-                        <div key={i} className="relative text-center" style={{ minWidth: `${widthPercent * 3}px` }}>
-                          {seg.preempted && (
-                            <div className="absolute left-1/2 -translate-x-1/2 -top-12 animate-pulse scale-105">
-                              <span className="bg-[#28363D] text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg ring-2 ring-[#2F575D] ring-opacity-70">
-                                PREEMPTED!
-                              </span>
-                            </div>
-                          )}
+                  <div className="flex gap-6 items-end justify-start min-w-max py-6 bg-gray-50 rounded-xl px-4">
+                    {segments.map((seg, i) => {
+                      const widthPercent = Math.max((seg.dur / makespan) * 100, 6);
 
+                      return (
+                        <div key={i} className="relative text-center" style={{ minWidth: `${widthPercent * 2}px` }}>
                           <div
-                            className={`rounded-xl text-white font-bold flex flex-col items-center justify-center shadow-md transition-all ${
-                              seg.idle
-                                ? "bg-gray-400 border-2 border-dashed border-gray-500"
-                                : getPriorityGradient(seg.prio)
-                            } ${seg.preempted ? "animate-pulse ring-2 ring-[#2F575D] ring-opacity-70 scale-105" : "hover:scale-105 hover:shadow-lg"}`}
-                            style={{
-                              width: Math.max(widthPercent * 4, 80),
-                              height: seg.idle ? 70 : 96
-                            }}
+                            className={`rounded-xl text-white font-bold flex flex-col items-center justify-center shadow-md transition-all ${seg.idle
+                              ? "bg-gray-400 border-2 border-dashed border-gray-500"
+                              : "bg-gradient-to-br from-[#2C80D3] to-[#0C3E72]"
+                              } hover:scale-105 hover:shadow-lg`}
+                            style={{ width: Math.max(widthPercent * 3, 80), height: 96 }}
                           >
                             <div className="text-2xl font-black">
                               {seg.idle ? "IDLE" : `P${seg.id + 1}`}
                             </div>
                             {!seg.idle && (
-                              <>
-                                <div className="text-xs opacity-90 mt-1">Prio: {seg.prio}</div>
-                                <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">{seg.dur }</div>
-                              </>
-                            )}
-                            {seg.idle && (
-                              <div className="text-sm font-bold bg-black bg-opacity-40 px-3 py-1 rounded mt-2">{seg.dur}</div>
+                              <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">{seg.dur}</div>
                             )}
                           </div>
 
                           <div className="mt-4">
-                            <div className="text-sm text-[#2F575D] font-semibold">{seg.start}</div>
+                            <div className="text-sm text-[#0C3E72] font-semibold">{seg.start}</div>
                             <div className="w-1 h-8 bg-gray-300 mx-auto my-1"></div>
-                            <div className="text-sm text-[#28363D] font-semibold">{seg.end}</div>
+                            <div className="text-sm text-[#091d3a] font-semibold">{seg.end}</div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-
-
                 </div>
               );
             })}
 
-            <div className="mt-8 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <h4 className="text-lg font-bold text-yellow-800 mb-2">Legend:</h4>
+            <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-lg font-bold text-blue-800 mb-2">Legend:</h4>
               <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#6D9197] to-[#2F575D] rounded"></div>
-                  <span className="text-sm">Priority 1 (Highest)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#2F575D] to-[#28363D] rounded"></div>
-                  <span className="text-sm">Priority 2</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#28363D] to-[#6D9197] rounded"></div>
-                  <span className="text-sm">Priority 3+</span>
+                  <div className="w-6 h-6 bg-gradient-to-br from-[#2C80D3] to-[#0C3E72] rounded"></div>
+                  <span className="text-sm">Active Process</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-gray-400 border-2 border-dashed border-gray-500 rounded"></div>
@@ -931,45 +601,28 @@ export default function MGCSimulation() {
                 </div>
               </div>
             </div>
-
-            <p className="text-center text-gray-500 mt-4 text-sm">
-              Scroll horizontally to see all processes →
-            </p>
           </div>
-        )}
+        ) : null}
 
         {/* =============== TABLE =============== */}
-        {tab === "table" && result && (
+        {tab === "table" && result && result.table && result.table.length > 0 ? (
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden my-8 border w-full max-w-8xl mx-auto">
-            <div className="bg-[#2F575D] text-white p-6 flex items-center justify-between">
+            <div className="bg-[#0C3E72] text-white p-6 flex items-center justify-between">
               <h2 className="text-3xl font-bold">Results Table</h2>
-              <span
-                className={`text-sm font-bold px-4 py-2 rounded-full ${
-                  isExcelMode ? "bg-yellow-400 text-[#28363D]" : "bg-[#6D9197] text-white"
-                }`}
-              >
+              <span className="text-sm font-bold px-4 py-2 rounded-full bg-[#2C80D3] text-white">
                 {isExcelMode ? "Source: Uploaded Excel Data" : "Source: Randomly Generated"}
               </span>
             </div>
 
-            {isExcelMode && (
-              <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3 text-sm text-yellow-900">
-                <strong>Note:</strong> Cp Lookup, Cp, and Avg Time Between Arrival are not applicable
-                for this run — this is real observed data, not randomly generated, so those columns
-                are hidden below.
-              </div>
-            )}
-
             <div className="overflow-x-auto w-full">
               <table className="w-full text-center table-auto text-lg">
-                <thead className="bg-[#6D9197]/80">
+                <thead className="bg-[#2C80D3]/80">
                   <tr>
                     {[
                       "Serial Number",
                       ...(isExcelMode ? [] : ["Cp Lookup", "Cp", "Avg Time Between Arrival"]),
                       "Inter Arrival",
                       "Arrival Time",
-                      "Priority",
                       "Service Time",
                       "Start Time",
                       "End Time",
@@ -978,10 +631,7 @@ export default function MGCSimulation() {
                       "Response Time",
                       "Server"
                     ].map((h) => (
-                      <th
-                        key={h}
-                        className="py-4 px-3 font-bold text-lg border border-[#2F575D]"
-                      >
+                      <th key={h} className="py-4 px-3 font-bold text-lg border border-[#0C3E72] text-white">
                         {h}
                       </th>
                     ))}
@@ -990,11 +640,8 @@ export default function MGCSimulation() {
 
                 <tbody>
                   {result.table.map((r, i) => (
-                    <tr
-                      key={i}
-                      className="border-b hover:bg-[#6D9197]/20 transition text-lg"
-                    >
-                      <td className="py-3 px-3 font-bold text-lg text-[#2F575D]">{r.serialNumber}</td>
+                    <tr key={i} className="border-b hover:bg-[#2C80D3]/10 transition text-lg">
+                      <td className="py-3 px-3 font-bold text-lg text-[#0C3E72]">{r.serialNumber}</td>
                       {!isExcelMode && (
                         <>
                           <td className="py-3 px-3">{r.cpLookup.toFixed(6)}</td>
@@ -1004,21 +651,12 @@ export default function MGCSimulation() {
                       )}
                       <td className="py-3 px-3">{r.interArrival}</td>
                       <td className="py-3 px-3">{r.arrivalTime}</td>
-                      <td className="py-3 px-3">
-                        <span className={`px-3 py-1 rounded-full text-white font-bold ${
-                          r.priority === 1 ? 'bg-[#6D9197]' :
-                          r.priority === 2 ? 'bg-[#2F575D]' :
-                          'bg-[#28363D]'
-                        }`}>
-                          {r.priority}
-                        </span>
-                      </td>
                       <td className="py-3 px-3">{r.serviceTime}</td>
-                      <td className="py-3 px-3 text-[#2F575D] font-bold">{r.startTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#28363D] font-bold">{r.endTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#6D9197] font-bold">{r.turnaroundTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#6D9197] font-bold">{r.waitTime.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-[#2F575D] font-bold">{r.responseTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#0C3E72] font-bold">{r.startTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#091d3a] font-bold">{r.endTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#2C80D3] font-bold">{r.turnaroundTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#2C80D3] font-bold">{r.waitTime.toFixed(2)}</td>
+                      <td className="py-3 px-3 text-[#0C3E72] font-bold">{r.responseTime.toFixed(2)}</td>
                       <td className="py-3 px-3 font-bold">{r.server}</td>
                     </tr>
                   ))}
@@ -1026,24 +664,23 @@ export default function MGCSimulation() {
               </table>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* =============== GRAPHS =============== */}
-        {tab === "graphs" && result && (
+        {tab === "graphs" && result && result.table && result.table.length > 0 ? (
           <div className="bg-white rounded-xl shadow-2xl my-10 border w-full max-w-7xl mx-auto overflow-hidden">
-            <div className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white p-8">
+            <div className="bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white p-8">
               <h2 className="text-3xl font-bold">Performance Analytics</h2>
             </div>
 
             <div className="grid grid-cols-12">
-              <div className="col-span-3 bg-[#28363D] text-white p-10 border-r min-h-[70vh]">
+              <div className="col-span-3 bg-[#091d3a] text-white p-10 border-r min-h-[70vh]">
                 <h3 className="text-xl font-bold mb-6">Graph Options</h3>
-
                 <label className="text-lg font-semibold">Graph Type</label>
                 <select
                   value={chartType}
                   onChange={(e) => setChartType(e.target.value)}
-                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#6D9197] text-white shadow"
+                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#2C80D3] text-white shadow"
                 >
                   <option value="bar">Bar Chart</option>
                   <option value="line">Line Chart</option>
@@ -1054,308 +691,128 @@ export default function MGCSimulation() {
                 <select
                   value={metric}
                   onChange={(e) => setMetric(e.target.value)}
-                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#6D9197] text-white shadow"
+                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#2C80D3] text-white shadow"
                 >
                   <option value="waiting">Waiting Time</option>
                   <option value="response">Response Time</option>
                   <option value="tat">Turnaround Time</option>
                   <option value="endTime">End Time</option>
                 </select>
-
-                <div className="mt-8 text-sm text-gray-100">
-                  <p><strong>Note:</strong> Response Time = Start - Arrival</p>
-                </div>
               </div>
 
               <div className="col-span-9 bg-white p-10 min-h-[70vh]">
-                <div className="w-full h-[65vh] bg-[#f3f7f8] rounded-2xl p-6 shadow-inner overflow-auto">
+                <div className="w-full h-[65vh] bg-[#f0f6ff] rounded-2xl p-6 shadow-inner overflow-auto">
                   {(() => {
                     const labels = result.table.map((r) => `P${r.serialNumber}`);
-
-                    let dataForMetric;
-                    if (metric === "waiting") {
-                      dataForMetric = result.table.map((r) => parseFloat(r.waitTime.toFixed(2)));
-                    } else if (metric === "response") {
-                      dataForMetric = result.table.map((r) => parseFloat(r.responseTime.toFixed(2)));
-                    } else if (metric === "tat") {
-                      dataForMetric = result.table.map((r) => parseFloat(r.turnaroundTime.toFixed(2)));
-                    } else if (metric === "endTime") {
-                      dataForMetric = result.table.map((r) => parseFloat(r.endTime.toFixed(2)));
-                    }
-
-                    const maxVal = Math.max(...dataForMetric) + 2;
+                    let dataForMetric = result.table.map((r) =>
+                      metric === "waiting"
+                        ? r.waitTime
+                        : metric === "response"
+                        ? r.responseTime
+                        : metric === "tat"
+                        ? r.turnaroundTime
+                        : r.endTime
+                    );
 
                     const dataset = {
                       labels,
                       datasets: [
                         {
-                          label: metric === "endTime" ? "End Time" : metric,
+                          label: metric,
                           data: dataForMetric,
-                          backgroundColor: result.table.map((r) =>
-                            r.priority === 1 ? themeColors[0] : r.priority === 2 ? themeColors[1] : themeColors[2]
-                          ),
+                          backgroundColor: themeColors[0],
                           borderColor: "#000",
-                          borderWidth: 1,
+                          borderWidth: 1
                         }
                       ]
                     };
 
-                    const options = {
-                      responsive: true,
-                      scales: {
-                        y: {
-                          beginAtZero: true,
-                          max: maxVal,
-                          ticks: {
-                            stepSize: 1
-                          },
-                          title: {
-                            display: true,
-                            text: metric === "endTime" ? "End Time" :
-                                  metric === "waiting" ? "Waiting Time" :
-                                  metric === "response" ? "Response Time" :
-                                  "Turnaround Time",
-                            font: {
-                              size: 16,
-                              weight: "bold"
-                            }
-                          }
-                        },
-                        x: {
-                          title: {
-                            display: true,
-                            text: "Processes",
-                            font: { size: 16, weight: "bold" }
-                          }
-                        }
-                      }
-                    };
+                    const options = { responsive: true };
 
-                    return chartType === "bar" ? <Bar data={dataset} options={options} /> :
-                           chartType === "line" ? <Line data={dataset} options={options} /> :
-                           <Pie
-                             data={{
-                               labels,
-                               datasets: [
-                                 {
-                                   data: dataForMetric,
-                                   backgroundColor: result.table.map((r) =>
-                                     r.priority === 1 ? themeColors[0] : r.priority === 2 ? themeColors[1] : themeColors[2]
-                                   )
-                                 }
-                               ]
-                             }}
-                             options={{ responsive: true }}
-                           />;
+                    return chartType === "bar" ? (
+                      <Bar data={dataset} options={options} />
+                    ) : chartType === "line" ? (
+                      <Line data={dataset} options={options} />
+                    ) : (
+                      <Pie
+                        data={{
+                          labels,
+                          datasets: [
+                            {
+                              data: dataForMetric,
+                              backgroundColor: result.table.map((_, i) =>
+                                i % 3 === 0 ? themeColors[0] : i % 3 === 1 ? themeColors[1] : themeColors[2]
+                              )
+                            }
+                          ]
+                        }}
+                        options={{ responsive: true }}
+                      />
+                    );
                   })()}
                 </div>
               </div>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* =============== CALCULATIONS =============== */}
-       {tab === "calc" && summary && result && (
-  <div className="p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto my-10">
-    <h2 className="text-3xl font-bold text-center mb-8 text-[#2F575D]">Performance Calculations</h2>
+        {tab === "calc" && result && summary && (
+          <div className="p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto my-10">
+            <h2 className="text-3xl font-bold text-center mb-8 text-[#0C3E72]">Performance Calculations</h2>
 
-    {/* Server Utilization Cards - M/G/C (generalized over numServers) */}
-    <div className="mb-12">
-      <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Server Utilization</h3>
-      <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
-        {Array.from({ length: numServers }, (_, idx) => idx + 1).map((serverNum, i) => (
-          <div
-            key={serverNum}
-            className={`p-8 rounded-2xl text-white shadow-lg ${
-              i % 2 === 0
-                ? "bg-gradient-to-br from-[#6D9197] to-[#2F575D]"
-                : "bg-gradient-to-br from-[#2F575D] to-[#28363D]"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-2xl font-semibold">Server {serverNum} Utilization</h3>
-                <div className="text-5xl font-black mt-4">{summary.serverUtilizations?.[`server${serverNum}`] || "0.0"}%</div>
-                <p className="mt-2 text-lg opacity-90">Percentage of time Server {serverNum} is busy</p>
-              </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold">{summary.totalCustomers}</div>
-                <p className="text-lg">Total Customers</p>
+            <div className="mb-12">
+              <h3 className="text-2xl font-bold mb-6 text-[#0C3E72]">Server Utilization</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Array.from({ length: numServers }, (_, idx) => idx + 1).map((serverNum, i) => (
+                  <div
+                    key={serverNum}
+                    className={`p-8 rounded-2xl text-white shadow-lg ${
+                      i % 2 === 0
+                        ? "bg-gradient-to-br from-[#2C80D3] to-[#0C3E72]"
+                        : "bg-gradient-to-br from-[#0C3E72] to-[#091d3a]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-2xl font-semibold">Server {serverNum} Utilization</h3>
+                        <div className="text-5xl font-black mt-4">
+                          {summary.serverUtilizations ? summary.serverUtilizations[`server${serverNum}`] : "0.0"}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </div>
 
-    {/* Overall Performance Metrics - M/G/C */}
-    <div className="mb-12">
-      <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Overall Performance Metrics</h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2F575D] to-[#28363D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Waiting Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgWait}</div>
-          <p className="mt-2 text-sm opacity-90">Average wait time</p>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#28363D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Turnaround Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgTAT}</div>
-          <p className="mt-2 text-sm opacity-90">Average completion time</p>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#2F575D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Service Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgService}</div>
-          <p className="mt-2 text-sm opacity-90">Average service time</p>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#2F575D] text-white shadow-lg">
-          <h3 className="text-lg font-semibold">Avg Response Time</h3>
-          <div className="text-4xl font-black mt-4">{summary.avgResponse}</div>
-          <p className="mt-2 text-sm opacity-90">Average response time</p>
-        </div>
-      </div>
-    </div>
-
-    {/* Priority Distribution - M/G/C */}
-    {summary.priorityWise && (
-      <div className="mb-12">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-[#2F575D]">Priority Distribution</h3>
-          <div className="text-lg font-semibold text-[#2F575D]">
-            Total: {summary.totalCustomers} Customers | {summary.uniquePriorities} Priority Levels
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
-            <div key={priorityKey} className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#6D9197] text-white shadow-lg">
-              <div className="flex flex-col items-center">
-                <h3 className="text-xl font-semibold mb-2">{priorityKey.replace('priority', 'Priority ')}</h3>
-                <div className="text-3xl font-black">{data.count}</div>
-                <div className="text-lg mt-1">Customers</div>
-                <div className="text-xl font-bold mt-2 bg-white text-[#28363D] px-3 py-1 rounded-full">
-                  {data.percentage}%
+            <div className="mb-12">
+              <h3 className="text-2xl font-bold mb-6 text-[#0C3E72]">Overall Performance Metrics</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0C3E72] to-[#091d3a] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Waiting Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgWait}</div>
+                  <p className="mt-2 text-sm opacity-90">Average wait time</p>
+                </div>
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2C80D3] to-[#091d3a] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Turnaround Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgTAT}</div>
+                  <p className="mt-2 text-sm opacity-90">Average completion time</p>
+                </div>
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#091d3a] to-[#0C3E72] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Service Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgService}</div>
+                  <p className="mt-2 text-sm opacity-90">Average service time</p>
+                </div>
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2C80D3] to-[#0C3E72] text-white shadow-lg">
+                  <h3 className="text-lg font-semibold">Avg Response Time</h3>
+                  <div className="text-4xl font-black mt-4">{summary.avgResponse}</div>
+                  <p className="mt-2 text-sm opacity-90">Average response time</p>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-    )}
-
-    {/* Priority-wise Performance Table - M/G/C */}
-    {summary.priorityWise && (
-      <div className="mb-12">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-[#2F575D]">Priority-wise Performance</h3>
-          <div className="text-lg font-semibold text-[#2F575D]">
-            {summary.uniqueServers} Servers | M/G/C Queue
           </div>
-        </div>
-
-        <div className="overflow-x-auto bg-white rounded-xl shadow-lg">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white">
-              <tr>
-                <th className="py-5 px-6 text-left text-xl">Priority Level</th>
-                <th className="py-5 px-6 text-center text-xl">Customers</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Wait Time</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Turnaround Time</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Service Time</th>
-                <th className="py-5 px-6 text-center text-xl">Avg Response Time</th>
-                <th className="py-5 px-6 text-center text-xl">% of Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(summary.priorityWise).map(([priorityKey, data]) => (
-                <tr key={priorityKey} className="border-b hover:bg-gray-50 transition">
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${
-                        priorityKey === 'priority1' ? 'bg-[#6D9197]' :
-                        priorityKey === 'priority2' ? 'bg-[#2F575D]' :
-                        'bg-[#28363D]'
-                      }`}>
-                        {priorityKey.replace('priority', '')}
-                      </span>
-                      <span className="text-lg font-semibold">
-                        {priorityKey === 'priority1' ? 'High Priority' :
-                         priorityKey === 'priority2' ? 'Medium Priority' :
-                         'Low Priority'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold">{data.count}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#6D9197]">{data.avgWait}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#2F575D]">{data.avgTAT}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#28363D]">{data.avgService}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold text-[#6D9197]">{data.avgResponse}</div>
-                  </td>
-                  <td className="py-4 px-6 text-center">
-                    <div className="text-2xl font-bold">{data.percentage}%</div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )}
-
-    {/* Performance Insights - M/G/C (generalized over numServers) */}
-    <div className="mt-12">
-      <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Performance Insights</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#6D9197] shadow">
-          <h4 className="text-xl font-bold text-[#2F575D] mb-4">System Efficiency</h4>
-          <div className="space-y-4">
-            {Array.from({ length: numServers }, (_, idx) => idx + 1).map((serverNum) => (
-              <div key={serverNum} className="flex justify-between items-center">
-                <span className="text-lg">Server {serverNum} Utilization:</span>
-                <span className="text-2xl font-bold text-[#6D9197]">{summary.serverUtilizations?.[`server${serverNum}`] || "0.0"}%</span>
-              </div>
-            ))}
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Avg Customer Throughput:</span>
-              <span className="text-2xl font-bold text-[#28363D]">
-                {((summary.totalCustomers / (result?.table[result.table.length - 1]?.endTime || 1)).toFixed(2))}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 bg-gradient-to-br from-[#f3f7f8] to-white rounded-2xl border border-[#2F575D] shadow">
-          <h4 className="text-xl font-bold text-[#2F575D] mb-4">Priority Analysis</h4>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Priority Levels:</span>
-              <span className="text-2xl font-bold text-[#28363D]">{summary.uniquePriorities}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Total Processes:</span>
-              <span className="text-2xl font-bold text-[#6D9197]">{summary.totalCustomers}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-lg">Number of Servers:</span>
-              <span className="text-2xl font-bold text-[#2F575D]">{summary.uniqueServers}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+        )}
       </main>
     </div>
   );

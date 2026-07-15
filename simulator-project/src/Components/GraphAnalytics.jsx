@@ -87,7 +87,7 @@ function generateServiceTimes(numCustomers, serviceDistribution, serviceParams) 
   return serviceTimes;
 }
 
-function calculateScheduleMG1(arr, serv, prio) {
+function calculateScheduleMG1(arr, serv) {
   const gantt = [];
   let t = 0;
   const q = [];
@@ -95,7 +95,6 @@ function calculateScheduleMG1(arr, serv, prio) {
     id: i,
     arr: a,
     rem: serv[i],
-    prio: prio[i],
     completed: false,
     firstStartTime: null
   }));
@@ -111,7 +110,7 @@ function calculateScheduleMG1(arr, serv, prio) {
       .filter((c) => c.arr <= t && !c.completed && !q.some((x) => x.id === c.id))
       .forEach((c) => q.push(c));
 
-    q.sort((a, b) => a.prio - b.prio);
+    q.sort((a, b) => a.arr - b.arr);
 
     if (serverAvailableTime <= t && !currentProcess && q.length > 0) {
       const c = q.shift();
@@ -120,7 +119,6 @@ function calculateScheduleMG1(arr, serv, prio) {
 
       gantt.push({
         id: c.id,
-        prio: c.prio,
         server: 1,
         start: +t.toFixed(2),
         end: +(t + serve).toFixed(2),
@@ -135,24 +133,6 @@ function calculateScheduleMG1(arr, serv, prio) {
       c.rem = 0;
     }
 
-    if (currentProcess && q.length > 0 && q[0].prio < currentProcess.prio) {
-      const preemptedProcess = currentProcess;
-      const preemptTime = t;
-      const lastEntry = gantt[gantt.length - 1];
-
-      if (lastEntry && lastEntry.id === preemptedProcess.id && !lastEntry.preempted) {
-        lastEntry.end = +preemptTime.toFixed(2);
-        lastEntry.dur = +(preemptTime - lastEntry.start).toFixed(2);
-        lastEntry.preempted = true;
-      }
-
-      preemptedProcess.rem = serverAvailableTime - preemptTime;
-      preemptedProcess.completed = false;
-      q.push(preemptedProcess);
-      serverAvailableTime = preemptTime;
-      currentProcess = null;
-    }
-
     if (currentProcess) {
       const nextArrival = cust.find((c) => !c.completed && c.arr > t)?.arr || Infinity;
       t = Math.min(serverAvailableTime, nextArrival);
@@ -164,7 +144,6 @@ function calculateScheduleMG1(arr, serv, prio) {
         if (nextArrivalTime > t) {
           gantt.push({
             id: -1,
-            prio: 0,
             server: 1,
             start: +t.toFixed(2),
             end: +nextArrivalTime.toFixed(2),
@@ -183,7 +162,7 @@ function calculateScheduleMG1(arr, serv, prio) {
   return gantt;
 }
 
-function calculateScheduleMG2(arr, serv, prio) {
+function calculateScheduleMG2(arr, serv) {
   const gantt = [];
   let t = 0;
   const q = [];
@@ -191,7 +170,6 @@ function calculateScheduleMG2(arr, serv, prio) {
     id: i,
     arr: a,
     rem: serv[i],
-    prio: prio[i],
     completed: false,
     firstStartTime: null
   }));
@@ -207,7 +185,7 @@ function calculateScheduleMG2(arr, serv, prio) {
       .filter((c) => c.arr <= t && !c.completed && !q.some((x) => x.id === c.id))
       .forEach((c) => q.push(c));
 
-    q.sort((a, b) => a.prio - b.prio);
+    q.sort((a, b) => a.arr - b.arr);
 
     for (let s = 0; s < 2; s++) {
       if (serverAvailableTime[s] <= t && !currentProcess[s] && q.length > 0) {
@@ -217,7 +195,6 @@ function calculateScheduleMG2(arr, serv, prio) {
 
         gantt.push({
           id: c.id,
-          prio: c.prio,
           server: s + 1,
           start: +t.toFixed(2),
           end: +(t + serve).toFixed(2),
@@ -230,28 +207,6 @@ function calculateScheduleMG2(arr, serv, prio) {
         currentProcess[s] = c;
         c.completed = true;
         c.rem = 0;
-      }
-    }
-
-    if (q.length > 0) {
-      for (let s = 0; s < 2; s++) {
-        if (currentProcess[s] && q[0].prio < currentProcess[s].prio) {
-          const preemptedProcess = currentProcess[s];
-          const preemptTime = t;
-          const lastEntry = gantt.filter((g) => g.server === s + 1).pop();
-
-          if (lastEntry && lastEntry.id === preemptedProcess.id && !lastEntry.preempted) {
-            lastEntry.end = +preemptTime.toFixed(2);
-            lastEntry.dur = +(preemptTime - lastEntry.start).toFixed(2);
-            lastEntry.preempted = true;
-          }
-
-          preemptedProcess.rem = serverAvailableTime[s] - preemptTime;
-          preemptedProcess.completed = false;
-          q.push(preemptedProcess);
-          serverAvailableTime[s] = preemptTime;
-          currentProcess[s] = null;
-        }
       }
     }
 
@@ -273,7 +228,6 @@ function calculateScheduleMG2(arr, serv, prio) {
           if (nextArrivalTime > t && serverAvailableTime[s] <= t) {
             gantt.push({
               id: -1,
-              prio: 0,
               server: s + 1,
               start: +t.toFixed(2),
               end: +nextArrivalTime.toFixed(2),
@@ -397,9 +351,6 @@ export default function GGC() {
   });
 
   const [numServers, setNumServers] = useState(2);
-  const [pMin, setPMin] = useState(1);
-  const [pMax, setPMax] = useState(3);
-  const [prioOn, setPrioOn] = useState(true);
   const [excelInputs, setExcelInputs] = useState(null);
   const [dataSource, setDataSource] = useState("random");
 
@@ -409,7 +360,7 @@ export default function GGC() {
   const [metric, setMetric] = useState("waiting");
   const [summary, setSummary] = useState(null);
 
-  const themeColors = ["#6D9197", "#2F575D", "#28363D"];
+  const themeColors = ["#2C80D3", "#0C3E72", "#091d3a"];
 
   useEffect(() => {
     setTab("form");
@@ -446,20 +397,10 @@ export default function GGC() {
             serviceParams[serviceDistribution]
           );
 
-      const priorities = usingExcel
-        ? prioOn
-          ? excelInputs.priorities?.length
-            ? excelInputs.priorities
-            : Array(arrivalTimes.length).fill(1)
-          : Array(arrivalTimes.length).fill(1)
-        : prioOn
-          ? arrivalTimes.map(() => Math.round(pMin + Math.random() * (pMax - pMin)))
-          : Array(arrivalTimes.length).fill(1);
-
       const gantt =
         numServers === 1
-          ? calculateScheduleMG1(arrivalTimes, serviceTimes, priorities)
-          : calculateScheduleMG2(arrivalTimes, serviceTimes, priorities);
+          ? calculateScheduleMG1(arrivalTimes, serviceTimes)
+          : calculateScheduleMG2(arrivalTimes, serviceTimes);
 
       const measures = performanceMeasures(arrivalTimes, serviceTimes, gantt);
 
@@ -478,8 +419,7 @@ export default function GGC() {
         turnaroundTime: +(measures.turnAroundTime[i] || 0).toFixed(2),
         waitTime: +(measures.waitingTime[i] || 0).toFixed(2),
         responseTime: +((measures.firstStartTime[i] || measures.startTime[i] || 0) - at).toFixed(2),
-        server: `Server ${measures.server[i] || 1}`,
-        priority: priorities[i]
+        server: `Server ${measures.server[i] || 1}`
       }));
 
       setResult({
@@ -498,20 +438,14 @@ export default function GGC() {
     }
   };
 
-  const getPriorityGradient = (prio) => {
-    if (prio === 1) return "bg-gradient-to-br from-[#6D9197] to-[#2F575D]";
-    if (prio === 2) return "bg-gradient-to-br from-[#2F575D] to-[#28363D]";
-    return "bg-gradient-to-br from-[#28363D] to-[#6D9197]";
-  };
-
   const TimePicker = ({ value, onChange, label }) => (
     <div className="space-y-2">
-      <label className="block text-sm font-semibold text-[#28363D]">{label}</label>
+      <label className="block text-sm font-semibold text-[#091d3a]">{label}</label>
       <div className="flex gap-2">
         <select
           value={value.hours}
           onChange={(e) => onChange({ ...value, hours: +e.target.value })}
-          className="flex-1 px-3 py-2 border-2 border-[#6D9197]/30 rounded-lg focus:border-[#6D9197]"
+          className="flex-1 px-3 py-2 border-2 border-[#2C80D3]/30 rounded-lg focus:border-[#2C80D3]"
         >
           {Array.from({ length: 24 }, (_, i) => (
             <option key={i} value={i}>
@@ -523,7 +457,7 @@ export default function GGC() {
         <select
           value={value.minutes}
           onChange={(e) => onChange({ ...value, minutes: +e.target.value })}
-          className="flex-1 px-3 py-2 border-2 border-[#6D9197]/30 rounded-lg focus:border-[#6D9197]"
+          className="flex-1 px-3 py-2 border-2 border-[#2C80D3]/30 rounded-lg focus:border-[#2C80D3]"
         >
           {[0, 15, 30, 45].map((min) => (
             <option key={min} value={min}>
@@ -540,24 +474,24 @@ export default function GGC() {
       {distribution === "uniform" && (
         <>
           <div>
-            <label className="block text-sm font-bold text-[#28363D] mb-2">Min (a) minutes</label>
+            <label className="block text-sm font-bold text-[#091d3a] mb-2">Min (a) minutes</label>
             <input
               type="number"
               step="0.1"
               value={params.a}
               onChange={(e) => onParamsChange({ ...params, a: +e.target.value })}
-              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#6D9197]/30 rounded-xl focus:border-[#6D9197] transition-all"
+              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3] transition-all"
               min="0.1"
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-[#28363D] mb-2">Max (b) minutes</label>
+            <label className="block text-sm font-bold text-[#091d3a] mb-2">Max (b) minutes</label>
             <input
               type="number"
               step="0.1"
               value={params.b}
               onChange={(e) => onParamsChange({ ...params, b: +e.target.value })}
-              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#6D9197]/30 rounded-xl focus:border-[#6D9197] transition-all"
+              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3] transition-all"
               min={params.a || 0.1}
             />
           </div>
@@ -566,24 +500,24 @@ export default function GGC() {
       {distribution === "normal" && (
         <>
           <div>
-            <label className="block text-sm font-bold text-[#28363D] mb-2">Mean (μ) minutes</label>
+            <label className="block text-sm font-bold text-[#091d3a] mb-2">Mean (μ) minutes</label>
             <input
               type="number"
               step="0.1"
               value={params.mean}
               onChange={(e) => onParamsChange({ ...params, mean: +e.target.value })}
-              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#6D9197]/30 rounded-xl focus:border-[#6D9197] transition-all"
+              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3] transition-all"
               min="0.1"
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-[#28363D] mb-2">Std Dev (σ) minutes</label>
+            <label className="block text-sm font-bold text-[#091d3a] mb-2">Std Dev (σ) minutes</label>
             <input
               type="number"
               step="0.1"
               value={params.stdDev}
               onChange={(e) => onParamsChange({ ...params, stdDev: +e.target.value })}
-              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#6D9197]/30 rounded-xl focus:border-[#6D9197] transition-all"
+              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3] transition-all"
               min="0.1"
             />
           </div>
@@ -592,24 +526,14 @@ export default function GGC() {
       {distribution === "exponential" && (
         <>
           <div>
-            <label className="block text-sm font-bold text-[#28363D] mb-2">Rate (λ) per minute</label>
+            <label className="block text-sm font-bold text-[#091d3a] mb-2">Rate (λ) per minute</label>
             <input
               type="number"
               step="0.01"
               value={params.lambda}
               onChange={(e) => onParamsChange({ ...params, lambda: +e.target.value })}
-              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#6D9197]/30 rounded-xl focus:border-[#6D9197] transition-all"
+              className="w-full px-4 py-3 text-center bg-gray-50 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3] transition-all"
               min="0.01"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-[#28363D] mb-2">Mean (1/λ) minutes</label>
-            <input
-              type="number"
-              value={(1 / params.lambda).toFixed(2)}
-              disabled
-              className="w-full px-4 py-3 text-center bg-gray-100 border-2 border-[#6D9197]/30 rounded-xl"
-              readOnly
             />
           </div>
         </>
@@ -618,17 +542,16 @@ export default function GGC() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f3f7f8]">
-      <nav className="bg-[#28363D] border-b shadow-sm w-full">
+    <div className="min-h-screen bg-[#f0f6ff]">
+      {/* TABS */}
+      <nav className="bg-[#091d3a] border-b shadow-sm w-full">
         <div className="flex w-full">
           {["form", "gantt", "table", "graphs", "calc"].map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-5 md:py-4 text-center font-semibold text-lg uppercase ${
-                tab === t
-                  ? "bg-[#6D9197] text-white"
-                  : "bg-[#28363D] text-gray-200 hover:bg-[#2F575D]"
+                tab === t ? "bg-[#2C80D3] text-white" : "bg-[#091d3a] text-gray-200 hover:bg-[#0C3E72]"
               } transition`}
             >
               {t === "form"
@@ -645,220 +568,164 @@ export default function GGC() {
         </div>
       </nav>
 
-      <main>
-        {/* =============== FORM =============== */}
+      <main className="container mx-auto p-4 md:p-8">
+        {/* =============== INPUT PARAMETERS FORM =============== */}
         {tab === "form" && (
-          <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 max-w-6xl mx-auto border border-gray-100 my-8">
-            <h2 className="text-4xl font-extrabold text-center mb-10 text-[#2F575D]">
-              G/G/C Queue Simulation
-            </h2>
+          <div className="max-w-4xl mx-auto space-y-8">
+            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+              <h2 className="text-3xl font-bold text-center mb-8 text-[#0C3E72]">
+                G/G/C Simulation Setup
+              </h2>
 
-            <div className="space-y-8">
-              {/* Input Type */}
-              <div className="bg-gradient-to-r from-[#6D9197]/10 to-[#2F575D]/10 rounded-2xl p-6">
-                <h3 className="text-2xl font-bold text-[#28363D] mb-4">Simulation Input Type</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <label className="flex items-center space-x-3 cursor-pointer p-4 bg-white rounded-xl border-2 border-[#6D9197]">
-                      <input
-                        type="radio"
-                        value="customerCount"
-                        checked={inputType === "customerCount"}
-                        onChange={(e) => setInputType(e.target.value)}
-                        className="w-5 h-5 text-[#6D9197]"
-                      />
-                      <div>
-                        <div className="text-lg font-semibold">Customer Count</div>
-                        <div className="text-sm text-gray-600">Fixed number of customers</div>
-                      </div>
-                    </label>
-                    {inputType === "customerCount" && (
-                      <div className="pl-8">
-                        <label className="block text-sm font-semibold mb-2">Number of Customers</label>
-                        <input
-                          type="number"
-                          value={customerCount}
-                          onChange={(e) => setCustomerCount(Math.max(1, +e.target.value))}
-                          className="w-full px-4 py-3 border-2 border-[#6D9197]/30 rounded-xl focus:border-[#6D9197]"
-                          min="1"
-                          max="1000"
-                        />
-                        <p className="text-sm text-gray-600 mt-1">
-                          Exactly {customerCount} customers will be generated
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="flex items-center space-x-3 cursor-pointer p-4 bg-white rounded-xl border-2 border-[#2F575D]">
-                      <input
-                        type="radio"
-                        value="timeRange"
-                        checked={inputType === "timeRange"}
-                        onChange={(e) => setInputType(e.target.value)}
-                        className="w-5 h-5 text-[#2F575D]"
-                      />
-                      <div>
-                        <div className="text-lg font-semibold">Time Range</div>
-                        <div className="text-sm text-gray-600">Simulate within time window</div>
-                      </div>
-                    </label>
-                    {inputType === "timeRange" && (
-                      <div className="pl-8 space-y-4">
-                        <TimePicker
-                          value={{ hours: timeRange.startHours, minutes: timeRange.startMinutes }}
-                          onChange={({ hours, minutes }) =>
-                            setTimeRange((prev) => ({
-                              ...prev,
-                              startHours: hours,
-                              startMinutes: minutes
-                            }))
-                          }
-                          label="Start Time"
-                        />
-                        <TimePicker
-                          value={{ hours: timeRange.endHours, minutes: timeRange.endMinutes }}
-                          onChange={({ hours, minutes }) =>
-                            setTimeRange((prev) => ({
-                              ...prev,
-                              endHours: hours,
-                              endMinutes: minutes
-                            }))
-                          }
-                          label="End Time"
-                        />
-                        <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
-                          Total Duration:{" "}
-                          {timeRange.endHours * 60 +
-                            timeRange.endMinutes -
-                            (timeRange.startHours * 60 + timeRange.startMinutes)}{" "}
-                          minutes
-                        </div>
-                      </div>
-                    )}
+              <div className="space-y-6">
+                {/* Input Type Selector */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-[#091d3a]">Arrival Mode</label>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => setInputType("customerCount")}
+                      className={`flex-1 py-3 px-4 rounded-xl font-bold border-2 transition-all ${
+                        inputType === "customerCount"
+                          ? "bg-[#2C80D3] text-white border-[#2C80D3]"
+                          : "border-gray-200 text-[#091d3a] hover:bg-gray-50"
+                      }`}
+                    >
+                      By Customer Count
+                    </button>
+                    <button
+                      onClick={() => setInputType("timeLimit")}
+                      className={`flex-1 py-3 px-4 rounded-xl font-bold border-2 transition-all ${
+                        inputType === "timeLimit"
+                          ? "bg-[#2C80D3] text-white border-[#2C80D3]"
+                          : "border-gray-200 text-[#091d3a] hover:bg-gray-50"
+                      }`}
+                    >
+                      By Time Range
+                    </button>
                   </div>
                 </div>
-              </div>
 
-              {/* Distributions */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-white border-2 border-[#6D9197]/20 rounded-2xl p-6">
-                  <h3 className="text-xl font-bold text-[#2F575D] mb-4">
-                    Arrival Distribution (Inter-arrival Times)
-                  </h3>
-                  <select
-                    value={arrivalDistribution}
-                    onChange={(e) => setArrivalDistribution(e.target.value)}
-                    className="w-full px-4 py-3 mb-4 border-2 border-[#6D9197]/30 rounded-xl focus:border-[#6D9197]"
-                  >
-                    <option value="uniform">Uniform Distribution</option>
-                    <option value="normal">Normal Distribution</option>
-                    <option value="exponential">Exponential Distribution</option>
-                  </select>
-                  <DistributionParams
-                    distribution={arrivalDistribution}
-                    params={arrivalParams[arrivalDistribution]}
-                    onParamsChange={(newParams) =>
-                      setArrivalParams({ ...arrivalParams, [arrivalDistribution]: newParams })
-                    }
-                  />
-                  <p className="text-sm text-gray-600 mt-2">
-                    Time between customer arrivals (minutes)
-                  </p>
+                {/* Conditional Inputs */}
+                {inputType === "customerCount" ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-[#091d3a]">
+                      Number of Customers
+                    </label>
+                    <input
+                      type="number"
+                      value={customerCount}
+                      onChange={(e) => setCustomerCount(Math.max(1, +e.target.value))}
+                      className="w-full px-4 py-3 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3]"
+                      min="1"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <TimePicker
+                      value={timeRange}
+                      onChange={(val) =>
+                        setTimeRange({
+                          ...timeRange,
+                          startHours: val.hours,
+                          startMinutes: val.minutes
+                        })
+                      }
+                      label="Start Time"
+                    />
+                    <TimePicker
+                      value={{ hours: timeRange.endHours, minutes: timeRange.endMinutes }}
+                      onChange={(val) =>
+                        setTimeRange({
+                          ...timeRange,
+                          endHours: val.hours,
+                          endMinutes: val.minutes
+                        })
+                      }
+                      label="End Time"
+                    />
+                  </div>
+                )}
+
+                <hr className="border-gray-100" />
+
+                {/* Distributions */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Arrival Distribution */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-bold text-[#0C3E72]">Arrival Distribution</h3>
+                    <select
+                      value={arrivalDistribution}
+                      onChange={(e) => setArrivalDistribution(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3]"
+                    >
+                      <option value="uniform">Uniform</option>
+                      <option value="normal">Normal</option>
+                      <option value="exponential">Exponential</option>
+                    </select>
+
+                    <DistributionParams
+                      distribution={arrivalDistribution}
+                      params={arrivalParams[arrivalDistribution]}
+                      onParamsChange={(newParams) =>
+                        setArrivalParams({ ...arrivalParams, [arrivalDistribution]: newParams })
+                      }
+                    />
+                  </div>
+
+                  {/* Service Distribution */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-bold text-[#0C3E72]">Service Distribution</h3>
+                    <select
+                      value={serviceDistribution}
+                      onChange={(e) => setServiceDistribution(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3]"
+                    >
+                      <option value="uniform">Uniform</option>
+                      <option value="normal">Normal</option>
+                      <option value="exponential">Exponential</option>
+                    </select>
+
+                    <DistributionParams
+                      distribution={serviceDistribution}
+                      params={serviceParams[serviceDistribution]}
+                      onParamsChange={(newParams) =>
+                        setServiceParams({ ...serviceParams, [serviceDistribution]: newParams })
+                      }
+                    />
+                  </div>
                 </div>
 
-                <div className="bg-white border-2 border-[#2F575D]/20 rounded-2xl p-6">
-                  <h3 className="text-xl font-bold text-[#2F575D] mb-4">Service Distribution</h3>
-                  <select
-                    value={serviceDistribution}
-                    onChange={(e) => setServiceDistribution(e.target.value)}
-                    className="w-full px-4 py-3 mb-4 border-2 border-[#2F575D]/30 rounded-xl focus:border-[#2F575D]"
-                  >
-                    <option value="uniform">Uniform Distribution</option>
-                    <option value="normal">Normal Distribution</option>
-                    <option value="exponential">Exponential Distribution</option>
-                  </select>
-                  <DistributionParams
-                    distribution={serviceDistribution}
-                    params={serviceParams[serviceDistribution]}
-                    onParamsChange={(newParams) =>
-                      setServiceParams({ ...serviceParams, [serviceDistribution]: newParams })
-                    }
-                  />
-                  <p className="text-sm text-gray-600 mt-2">
-                    Service times for each customer (minutes)
-                  </p>
-                </div>
-              </div>
+                <hr className="border-gray-100" />
 
-              {/* Server & Priority */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-white border-2 border-[#28363D]/20 rounded-2xl p-6">
-                  <h3 className="text-xl font-bold text-[#2F575D] mb-4">Server Configuration</h3>
+                {/* Servers */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-[#091d3a]">
+                    Select Server Configuration
+                  </label>
                   <select
                     value={numServers}
                     onChange={(e) => setNumServers(Math.max(1, +e.target.value))}
-                    className="w-full px-4 py-3 border-2 border-[#28363D]/30 rounded-xl focus:border-[#28363D]"
+                    className="w-full px-4 py-3 border-2 border-[#2C80D3]/30 rounded-xl focus:border-[#2C80D3]"
                   >
                     <option value={1}>Single Server (G/G/1)</option>
                     <option value={2}>Two Servers (G/G/2)</option>
                   </select>
                   <p className="text-sm text-gray-600 mt-2">Number of servers available</p>
                 </div>
-
-                <div className="bg-white border-2 border-[#6D9197]/20 rounded-2xl p-6">
-                  <h3 className="text-xl font-bold text-[#2F575D] mb-4">Priority Settings</h3>
-                  <label className="flex items-center space-x-3 mb-4 p-3 bg-gray-50 rounded-lg">
-                    <input
-                      type="checkbox"
-                      checked={prioOn}
-                      onChange={(e) => setPrioOn(e.target.checked)}
-                      className="w-5 h-5 text-[#6D9197]"
-                    />
-                    <span className="font-semibold">Enable Priority Queue</span>
-                  </label>
-
-                  {prioOn && (
-                    <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 rounded-lg">
-                      <div>
-                        <label className="block text-sm font-semibold mb-1">Min Priority (Highest)</label>
-                        <input
-                          type="number"
-                          value={pMin}
-                          onChange={(e) => setPMin(Math.max(1, +e.target.value))}
-                          className="w-full px-3 py-2 border border-[#6D9197]/30 rounded-lg"
-                          min="1"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold mb-1">Max Priority (Lowest)</label>
-                        <input
-                          type="number"
-                          value={pMax}
-                          onChange={(e) => setPMax(Math.max(pMin, +e.target.value))}
-                          className="w-full px-3 py-2 border border-[#6D9197]/30 rounded-lg"
-                          min={pMin}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-sm text-gray-600 mt-2">Lower number = Higher priority</p>
-                </div>
               </div>
 
               {/* Excel upload */}
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-200">
+              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-200 mt-6">
                 <ExcelDataLoader onDataReady={setExcelInputs} />
                 {excelInputs && (
                   <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <p className="text-sm text-[#2F575D] font-medium">
-                      Excel data loaded. The next run will use the uploaded arrivals, service times, and priorities.
+                    <p className="text-sm text-[#0C3E72] font-medium">
+                      Excel data loaded. The next run will use the uploaded arrivals and service times.
                     </p>
                     <button
                       type="button"
                       onClick={clearExcelData}
-                      className="self-start md:self-auto px-4 py-2 rounded-lg border border-[#2F575D] text-[#2F575D] font-semibold hover:bg-[#2F575D] hover:text-white transition-colors"
+                      className="self-start md:self-auto px-4 py-2 rounded-lg border border-[#0C3E72] text-[#0C3E72] font-semibold hover:bg-[#0C3E72] hover:text-white transition-colors"
                     >
                       Clear Excel Data
                     </button>
@@ -870,7 +737,7 @@ export default function GGC() {
               <div className="text-center pt-6">
                 <button
                   onClick={runSimulation}
-                  className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white px-16 py-4 rounded-2xl font-bold text-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 shadow-lg"
+                  className="bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white px-16 py-4 rounded-2xl font-bold text-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 shadow-lg"
                 >
                   Run Simulation
                 </button>
@@ -882,7 +749,7 @@ export default function GGC() {
         {/* =============== GANTT CHART =============== */}
         {tab === "gantt" && result && result.ganttChart && result.ganttChart.length > 0 && (
           <div className="bg-white rounded-2xl shadow-xl my-8 p-8 border overflow-auto max-w-7xl mx-auto">
-            <h2 className="text-2xl font-bold text-center mb-8 text-[#2F575D]">Gantt Chart</h2>
+            <h2 className="text-2xl font-bold text-center mb-8 text-[#0C3E72]">Gantt Chart</h2>
 
             {Array.from({ length: numServers }, (_, serverIndex) => {
               const serverData = getGanttDataByServer(result.ganttChart, numServers)[serverIndex] || [];
@@ -890,7 +757,7 @@ export default function GGC() {
 
               return (
                 <div key={serverIndex} className="mb-12">
-                  <h3 className="text-xl font-bold text-center mb-6 bg-[#6D9197] text-white py-3 rounded-lg">
+                  <h3 className="text-xl font-bold text-center mb-6 bg-[#2C80D3] text-white py-3 rounded-lg">
                     Server {serverIndex + 1}
                   </h3>
 
@@ -904,24 +771,12 @@ export default function GGC() {
                           className="relative text-center"
                           style={{ minWidth: `${widthPercent * 3}px` }}
                         >
-                          {seg.preempted && (
-                            <div className="absolute left-1/2 -translate-x-1/2 -top-12 animate-pulse scale-105">
-                              <span className="bg-[#28363D] text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg ring-2 ring-[#2F575D] ring-opacity-70">
-                                PREEMPTED!
-                              </span>
-                            </div>
-                          )}
-
                           <div
                             className={`rounded-xl text-white font-bold flex flex-col items-center justify-center shadow-md transition-all ${
                               seg.idle
                                 ? "bg-gray-400 border-2 border-dashed border-gray-500"
-                                : getPriorityGradient(seg.prio)
-                            } ${
-                              seg.preempted
-                                ? "animate-pulse ring-2 ring-[#2F575D] ring-opacity-70 scale-105"
-                                : "hover:scale-105 hover:shadow-lg"
-                            }`}
+                                : "bg-gradient-to-br from-[#2C80D3] to-[#0C3E72]"
+                            } hover:scale-105 hover:shadow-lg`}
                             style={{
                               width: Math.max(widthPercent * 4, 80),
                               height: seg.idle ? 70 : 96
@@ -931,12 +786,9 @@ export default function GGC() {
                               {seg.idle ? "IDLE" : `P${seg.id + 1}`}
                             </div>
                             {!seg.idle && (
-                              <>
-                                <div className="text-xs opacity-90 mt-1">Prio: {seg.prio}</div>
-                                <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">
-                                  {Math.round(seg.dur)}
-                                </div>
-                              </>
+                              <div className="text-xl font-bold bg-black bg-opacity-40 px-4 py-1 rounded mt-2">
+                                {Math.round(seg.dur)}
+                              </div>
                             )}
                             {seg.idle && (
                               <div className="text-sm font-bold bg-black bg-opacity-40 px-3 py-1 rounded mt-2">
@@ -946,11 +798,11 @@ export default function GGC() {
                           </div>
 
                           <div className="mt-4">
-                            <div className="text-sm text-[#2F575D] font-semibold">
+                            <div className="text-sm text-[#0C3E72] font-semibold">
                               {Math.round(seg.start)}
                             </div>
                             <div className="w-1 h-8 bg-gray-300 mx-auto my-1"></div>
-                            <div className="text-sm text-[#28363D] font-semibold">
+                            <div className="text-sm text-[#091d3a] font-semibold">
                               {Math.round(seg.end)}
                             </div>
                           </div>
@@ -962,20 +814,12 @@ export default function GGC() {
               );
             })}
 
-            <div className="mt-8 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <h4 className="text-lg font-bold text-yellow-800 mb-2">Legend:</h4>
+            <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-lg font-bold text-blue-800 mb-2">Legend:</h4>
               <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#6D9197] to-[#2F575D] rounded"></div>
-                  <span className="text-sm">Priority 1 (Highest)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#2F575D] to-[#28363D] rounded"></div>
-                  <span className="text-sm">Priority 2</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#28363D] to-[#6D9197] rounded"></div>
-                  <span className="text-sm">Priority 3+</span>
+                  <div className="w-6 h-6 bg-gradient-to-br from-[#2C80D3] to-[#0C3E72] rounded"></div>
+                  <span className="text-sm">Active Process</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-gray-400 border-2 border-dashed border-gray-500 rounded"></div>
@@ -993,7 +837,7 @@ export default function GGC() {
         {/* =============== TABLE =============== */}
         {tab === "table" && result && result.table && result.table.length > 0 && (
           <div className="bg-white rounded-xl shadow-2xl overflow-hidden my-8 border w-full max-w-8xl mx-auto">
-            <div className="bg-[#2F575D] text-white p-6">
+            <div className="bg-[#0C3E72] text-white p-6">
               <h2 className="text-3xl font-bold">Results Table</h2>
               <p className="mt-2 text-sm text-white/80">
                 Source: {isExcelMode ? "Uploaded Excel Data" : "Randomly Generated"}
@@ -1002,13 +846,12 @@ export default function GGC() {
 
             <div className="overflow-x-auto w-full">
               <table className="w-full text-center table-auto text-lg">
-                <thead className="bg-[#6D9197]/80">
+                <thead className="bg-[#2C80D3]/80">
                   <tr>
                     {[
                       "Serial Number",
                       "Inter Arrival",
                       "Arrival Time",
-                      "Priority",
                       "Service Time",
                       "Start Time",
                       "End Time",
@@ -1017,7 +860,7 @@ export default function GGC() {
                       "Response Time",
                       "Server"
                     ].map((h) => (
-                      <th key={h} className="py-4 px-3 font-bold text-lg border border-[#2F575D]">
+                      <th key={h} className="py-4 px-3 font-bold text-lg border border-[#0C3E72] text-white">
                         {h}
                       </th>
                     ))}
@@ -1025,31 +868,18 @@ export default function GGC() {
                 </thead>
                 <tbody>
                   {result.table.map((r, i) => (
-                    <tr key={i} className="border-b hover:bg-[#6D9197]/20 transition text-lg">
-                      <td className="py-3 px-3 font-bold text-lg text-[#2F575D]">{r.serialNumber}</td>
+                    <tr key={i} className="border-b hover:bg-[#2C80D3]/10 transition text-lg">
+                      <td className="py-3 px-3 font-bold text-lg text-[#0C3E72]">{r.serialNumber}</td>
                       <td className="py-3 px-3">{Math.round(r.interArrival)}</td>
                       <td className="py-3 px-3">{Math.round(r.arrivalTime)}</td>
-                      <td className="py-3 px-3">
-                        <span
-                          className={`px-3 py-1 rounded-full text-white font-bold ${
-                            r.priority === 1
-                              ? "bg-[#6D9197]"
-                              : r.priority === 2
-                              ? "bg-[#2F575D]"
-                              : "bg-[#28363D]"
-                          }`}
-                        >
-                          {r.priority}
-                        </span>
-                      </td>
                       <td className="py-3 px-3">{Math.round(r.serviceTime)}</td>
-                      <td className="py-3 px-3 text-[#2F575D] font-bold">{Math.round(r.startTime)}</td>
-                      <td className="py-3 px-3 text-[#28363D] font-bold">{Math.round(r.endTime)}</td>
-                      <td className="py-3 px-3 text-[#6D9197] font-bold">
+                      <td className="py-3 px-3 text-[#0C3E72] font-bold">{Math.round(r.startTime)}</td>
+                      <td className="py-3 px-3 text-[#091d3a] font-bold">{Math.round(r.endTime)}</td>
+                      <td className="py-3 px-3 text-[#2C80D3] font-bold">
                         {Math.round(r.turnaroundTime)}
                       </td>
-                      <td className="py-3 px-3 text-[#6D9197] font-bold">{Math.round(r.waitTime)}</td>
-                      <td className="py-3 px-3 text-[#2F575D] font-bold">
+                      <td className="py-3 px-3 text-[#2C80D3] font-bold">{Math.round(r.waitTime)}</td>
+                      <td className="py-3 px-3 text-[#0C3E72] font-bold">
                         {Math.round(r.responseTime)}
                       </td>
                       <td className="py-3 px-3 font-bold">{r.server}</td>
@@ -1064,19 +894,19 @@ export default function GGC() {
         {/* =============== GRAPHS =============== */}
         {tab === "graphs" && result && result.table && result.table.length > 0 && (
           <div className="bg-white rounded-xl shadow-2xl my-10 border w-full max-w-7xl mx-auto overflow-hidden">
-            <div className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white p-8">
+            <div className="bg-gradient-to-r from-[#2C80D3] to-[#0C3E72] text-white p-8">
               <h2 className="text-3xl font-bold">Performance Analytics</h2>
             </div>
 
             <div className="grid grid-cols-12">
-              <div className="col-span-3 bg-[#28363D] text-white p-10 border-r min-h-[70vh]">
+              <div className="col-span-3 bg-[#091d3a] text-white p-10 border-r min-h-[70vh]">
                 <h3 className="text-xl font-bold mb-6">Graph Options</h3>
 
                 <label className="text-lg font-semibold">Graph Type</label>
                 <select
                   value={chartType}
                   onChange={(e) => setChartType(e.target.value)}
-                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#6D9197] text-white shadow"
+                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#2C80D3] text-white shadow"
                 >
                   <option value="bar">Bar Chart</option>
                   <option value="line">Line Chart</option>
@@ -1087,7 +917,7 @@ export default function GGC() {
                 <select
                   value={metric}
                   onChange={(e) => setMetric(e.target.value)}
-                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#6D9197] text-white shadow"
+                  className="mt-3 w-full px-6 py-4 rounded-xl bg-[#2C80D3] text-white shadow"
                 >
                   <option value="waiting">Waiting Time</option>
                   <option value="response">Response Time</option>
@@ -1103,7 +933,7 @@ export default function GGC() {
               </div>
 
               <div className="col-span-9 bg-white p-10 min-h-[70vh]">
-                <div className="w-full h-[65vh] bg-[#f3f7f8] rounded-2xl p-6 shadow-inner overflow-auto">
+                <div className="w-full h-[65vh] bg-[#f0f6ff] rounded-2xl p-6 shadow-inner overflow-auto">
                   {(() => {
                     const labels = result.table.map((r) => `P${r.serialNumber}`);
 
@@ -1133,13 +963,7 @@ export default function GGC() {
                               ? "Response Time"
                               : "Turnaround Time",
                           data: dataForMetric,
-                          backgroundColor: result.table.map((r) =>
-                            r.priority === 1
-                              ? themeColors[0]
-                              : r.priority === 2
-                              ? themeColors[1]
-                              : themeColors[2]
-                          ),
+                          backgroundColor: themeColors[0],
                           borderColor: "#000",
                           borderWidth: 1
                         }
@@ -1187,12 +1011,8 @@ export default function GGC() {
                           datasets: [
                             {
                               data: dataForMetric,
-                              backgroundColor: result.table.map((r) =>
-                                r.priority === 1
-                                  ? themeColors[0]
-                                  : r.priority === 2
-                                  ? themeColors[1]
-                                  : themeColors[2]
+                              backgroundColor: result.table.map((_, i) =>
+                                i % 3 === 0 ? themeColors[0] : i % 3 === 1 ? themeColors[1] : themeColors[2]
                               )
                             }
                           ]
@@ -1210,15 +1030,15 @@ export default function GGC() {
         {/* =============== CALCULATIONS =============== */}
         {tab === "calc" && result && summary && (
           <div className="p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto my-10">
-            <h2 className="text-3xl font-bold text-center mb-8 text-[#2F575D]">
+            <h2 className="text-3xl font-bold text-center mb-8 text-[#0C3E72]">
               Performance Calculations
             </h2>
 
             {/* Server Utilization */}
             <div className="mb-12">
-              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Server Utilization</h3>
+              <h3 className="text-2xl font-bold mb-6 text-[#0C3E72]">Server Utilization</h3>
               <div className="grid grid-cols-1 gap-6">
-                <div className="p-8 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#2F575D] text-white shadow-lg">
+                <div className="p-8 rounded-2xl bg-gradient-to-br from-[#2C80D3] to-[#0C3E72] text-white shadow-lg">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-2xl font-semibold">Server 1 Utilization</h3>
@@ -1235,7 +1055,7 @@ export default function GGC() {
                 </div>
 
                 {numServers >= 2 && (
-                  <div className="p-8 rounded-2xl bg-gradient-to-br from-[#2F575D] to-[#28363D] text-white shadow-lg">
+                  <div className="p-8 rounded-2xl bg-gradient-to-br from-[#0C3E72] to-[#091d3a] text-white shadow-lg">
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-2xl font-semibold">Server 2 Utilization</h3>
@@ -1256,178 +1076,30 @@ export default function GGC() {
 
             {/* Overall Performance Metrics */}
             <div className="mb-12">
-              <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Overall Performance Metrics</h3>
+              <h3 className="text-2xl font-bold mb-6 text-[#0C3E72]">Overall Performance Metrics</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2F575D] to-[#28363D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#0C3E72] to-[#091d3a] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Waiting Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgWait}</div>
                   <p className="mt-2 text-sm opacity-90">Average wait time</p>
                 </div>
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#28363D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2C80D3] to-[#091d3a] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Turnaround Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgTAT}</div>
                   <p className="mt-2 text-sm opacity-90">Average completion time</p>
                 </div>
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#2F575D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#091d3a] to-[#0C3E72] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Service Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgService}</div>
                   <p className="mt-2 text-sm opacity-90">Average service time</p>
                 </div>
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#6D9197] to-[#2F575D] text-white shadow-lg">
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-[#2C80D3] to-[#0C3E72] text-white shadow-lg">
                   <h3 className="text-lg font-semibold">Avg Response Time</h3>
                   <div className="text-4xl font-black mt-4">{summary.avgResponse}</div>
                   <p className="mt-2 text-sm opacity-90">Average response time</p>
                 </div>
               </div>
             </div>
-
-            {/* Priority Distribution */}
-            {prioOn && result.table && result.table.length > 0 && (
-              <div className="mb-12">
-                <h3 className="text-2xl font-bold mb-6 text-[#2F575D]">Priority Distribution</h3>
-
-                {(() => {
-                  const priorityStats = {};
-                  result.table.forEach((customer) => {
-                    const p = customer.priority;
-                    if (!priorityStats[p]) {
-                      priorityStats[p] = {
-                        count: 0,
-                        totalWaitTime: 0,
-                        totalServiceTime: 0,
-                        totalResponseTime: 0,
-                        totalTurnaroundTime: 0
-                      };
-                    }
-                    priorityStats[p].count++;
-                    priorityStats[p].totalWaitTime += customer.waitTime || 0;
-                    priorityStats[p].totalServiceTime += customer.serviceTime || 0;
-                    priorityStats[p].totalResponseTime += customer.responseTime || 0;
-                    priorityStats[p].totalTurnaroundTime += customer.turnaroundTime || 0;
-                  });
-
-                  const priorityKeys = Object.keys(priorityStats).sort((a, b) => a - b);
-
-                  return (
-                    <>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        {priorityKeys.map((priority) => {
-                          const stats = priorityStats[priority];
-                          return (
-                            <div
-                              key={priority}
-                              className="p-6 rounded-2xl bg-gradient-to-br from-[#28363D] to-[#6D9197] text-white shadow-lg"
-                            >
-                              <div className="flex flex-col items-center">
-                                <h3 className="text-xl font-semibold mb-2">Priority {priority}</h3>
-                                <div className="text-3xl font-black">{stats.count}</div>
-                                <div className="text-lg mt-1">Customers</div>
-                                <div className="text-xl font-bold mt-2 bg-white text-[#28363D] px-3 py-1 rounded-full">
-                                  {((stats.count / result.table.length) * 100).toFixed(1)}%
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="mt-8 overflow-x-auto bg-white rounded-xl shadow-lg">
-                        <table className="w-full">
-                          <thead className="bg-gradient-to-r from-[#6D9197] to-[#2F575D] text-white">
-                            <tr>
-                              <th className="py-5 px-6 text-left text-xl">Priority Level</th>
-                              <th className="py-5 px-6 text-center text-xl">Customers</th>
-                              <th className="py-5 px-6 text-center text-xl">Avg Wait Time</th>
-                              <th className="py-5 px-6 text-center text-xl">Avg Turnaround Time</th>
-                              <th className="py-5 px-6 text-center text-xl">Avg Service Time</th>
-                              <th className="py-5 px-6 text-center text-xl">Avg Response Time</th>
-                              <th className="py-5 px-6 text-center text-xl">% of Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {priorityKeys.map((priority) => {
-                              const stats = priorityStats[priority];
-                              return (
-                                <tr key={priority} className="border-b hover:bg-gray-50 transition">
-                                  <td className="py-4 px-6">
-                                    <div className="flex items-center gap-3">
-                                      <span
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${
-                                          priority === "1"
-                                            ? "bg-[#6D9197]"
-                                            : priority === "2"
-                                            ? "bg-[#2F575D]"
-                                            : "bg-[#28363D]"
-                                        }`}
-                                      >
-                                        {priority}
-                                      </span>
-                                      <span className="text-lg font-semibold">
-                                        {priority === "1"
-                                          ? "High Priority"
-                                          : priority === "2"
-                                          ? "Medium Priority"
-                                          : "Low Priority"}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-6 text-center">
-                                    <div className="text-2xl font-bold">{stats.count}</div>
-                                  </td>
-                                  <td className="py-4 px-6 text-center">
-                                    <div className="text-2xl font-bold text-[#6D9197]">
-                                      {(stats.totalWaitTime / stats.count).toFixed(2)}
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-6 text-center">
-                                    <div className="text-2xl font-bold text-[#2F575D]">
-                                      {(stats.totalTurnaroundTime / stats.count).toFixed(2)}
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-6 text-center">
-                                    <div className="text-2xl font-bold text-[#28363D]">
-                                      {(stats.totalServiceTime / stats.count).toFixed(2)}
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-6 text-center">
-                                    <div className="text-2xl font-bold text-[#6D9197]">
-                                      {(stats.totalResponseTime / stats.count).toFixed(2)}
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-6 text-center">
-                                    <div className="text-2xl font-bold">
-                                      {((stats.count / result.table.length) * 100).toFixed(1)}%
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="mt-6 flex justify-between items-center">
-                        <div>
-                          <span className="text-lg">Total Customers:</span>
-                          <div className="text-2xl font-bold text-[#28363D]">{result.table.length}</div>
-                        </div>
-                        <div>
-                          <span className="text-lg">Total Simulation Time:</span>
-                          <div className="text-2xl font-bold text-[#2F575D]">
-                            {Math.round(
-                              result.table[result.table.length - 1]?.endTime ||
-                                result.ganttChart[result.ganttChart.length - 1]?.end ||
-                                0
-                            )}{" "}
-                            minutes
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
           </div>
         )}
       </main>
