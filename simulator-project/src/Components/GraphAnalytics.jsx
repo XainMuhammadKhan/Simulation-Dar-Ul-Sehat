@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Bar, Line, Pie } from "react-chartjs-2";
-import ExcelDataLoader from "./ExcelDataLoader";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -351,8 +350,6 @@ export default function GGC() {
   });
 
   const [numServers, setNumServers] = useState(2);
-  const [excelInputs, setExcelInputs] = useState(null);
-  const [dataSource, setDataSource] = useState("random");
 
   const [result, setResult] = useState(null);
   const [tab, setTab] = useState("form");
@@ -366,17 +363,8 @@ export default function GGC() {
     setTab("form");
   }, []);
 
-  const clearExcelData = () => {
-    setExcelInputs(null);
-    setDataSource("random");
-  };
-
-  const isExcelMode = dataSource === "excel";
-
   const runSimulation = () => {
     try {
-      const usingExcel = Boolean(excelInputs);
-
       const randomInputs = generateArrivalTimes(
         inputType,
         inputType === "customerCount" ? { count: customerCount } : timeRange,
@@ -384,14 +372,10 @@ export default function GGC() {
         arrivalParams[arrivalDistribution]
       );
 
-      const arrivalTimes = usingExcel ? excelInputs.arrivalTimes : randomInputs.arrivalTimes;
-      const interArrivalTimes = usingExcel
-        ? buildInterArrivalTimes(arrivalTimes)
-        : randomInputs.interArrivalTimes;
+      const arrivalTimes = randomInputs.arrivalTimes;
+      const interArrivalTimes = randomInputs.interArrivalTimes;
 
-      const serviceTimes = usingExcel
-        ? excelInputs.serviceTimes
-        : generateServiceTimes(
+      const serviceTimes = generateServiceTimes(
             arrivalTimes.length,
             serviceDistribution,
             serviceParams[serviceDistribution]
@@ -427,9 +411,8 @@ export default function GGC() {
         ganttChart: gantt,
         utilization: overallUtil,
         serverUtilizations,
-        source: usingExcel ? "excel" : "random"
+        source: "random"
       });
-      setDataSource(usingExcel ? "excel" : "random");
       setTab("table");
       setSummary(computeSummary(table, overallUtil, serverUtilizations));
     } catch (error) {
@@ -714,24 +697,7 @@ export default function GGC() {
                 </div>
               </div>
 
-              {/* Excel upload */}
-              <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-200 mt-6">
-                <ExcelDataLoader onDataReady={setExcelInputs} />
-                {excelInputs && (
-                  <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <p className="text-sm text-[#0C3E72] font-medium">
-                      Excel data loaded. The next run will use the uploaded arrivals and service times.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={clearExcelData}
-                      className="self-start md:self-auto px-4 py-2 rounded-lg border border-[#0C3E72] text-[#0C3E72] font-semibold hover:bg-[#0C3E72] hover:text-white transition-colors"
-                    >
-                      Clear Excel Data
-                    </button>
-                  </div>
-                )}
-              </div>
+
 
               {/* Run Button */}
               <div className="text-center pt-6">
@@ -840,7 +806,7 @@ export default function GGC() {
             <div className="bg-[#0C3E72] text-white p-6">
               <h2 className="text-3xl font-bold">Results Table</h2>
               <p className="mt-2 text-sm text-white/80">
-                Source: {isExcelMode ? "Uploaded Excel Data" : "Randomly Generated"}
+                Source: Randomly Generated
               </p>
             </div>
 

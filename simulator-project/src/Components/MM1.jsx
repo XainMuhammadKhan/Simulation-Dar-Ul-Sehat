@@ -12,8 +12,7 @@ import {
   LineElement,
   ArcElement
 } from "chart.js";
-import ExcelDataLoader from "./ExcelDataLoader";
-import { runQueueSimulation } from "../utils/queueEngine";
+
 
 ChartJS.register(
   CategoryScale,
@@ -238,46 +237,16 @@ export default function MM1() {
   const [metric, setMetric] = useState("waiting");
   const [summary, setSummary] = useState(null);
 
-  // ---- Excel mode state ----
-  const [excelInputs, setExcelInputs] = useState(null);
-  const [dataSource, setDataSource] = useState("random");
 
   const themeColors = ["#2C80D3", "#0C3E72", "#091d3a"];
 
   const runSim = () => {
-    if (excelInputs) {
-      // ---- Run from uploaded Excel data ----
-      const priorities = Array(excelInputs.arrivalTimes.length).fill(1);
-      const data = runQueueSimulation(
-        excelInputs.arrivalTimes,
-        excelInputs.serviceTimes,
-        priorities,
-        1 // M/M/1 → single server
-      );
-      setResult(data);
-      setDataSource("excel");
-      setTab("table");
-      const s = computeSummary(data.table, data.utilization);
-      setSummary(s);
-    } else {
-      // ---- Run from randomly generated data (unchanged) ----
-      const data = generateCummulativeProbability(
-        lambda,
-        mu
-      );
-      setResult(data);
-      setDataSource("random");
-      setTab("table");
-      const s = computeSummary(data.table, data.utilization);
-      setSummary(s);
-    }
+    const data = generateCummulativeProbability(lambda, mu);
+    setResult(data);
+    setTab("table");
+    const s = computeSummary(data.table, data.utilization);
+    setSummary(s);
   };
-
-  const clearExcelData = () => {
-    setExcelInputs(null);
-  };
-
-  const isExcelMode = dataSource === "excel";
 
   return (
     <div className="min-h-screen bg-[#f0f6ff]">
@@ -302,24 +271,7 @@ export default function MM1() {
         {/* =============== FORM =============== */}
         {tab === "form" && (
           <div className="max-w-4xl mx-auto space-y-8">
-            {/* ---- Excel upload block ---- */}
-            <div className="mt-8">
-              <ExcelDataLoader onDataReady={setExcelInputs} />
-              {excelInputs && (
-                <div className="max-w-2xl mx-auto -mt-4 mb-6 flex items-center justify-between bg-[#2C80D3]/10 border border-[#2C80D3]/40 rounded-xl px-6 py-3">
-                  <span className="text-sm font-semibold text-[#0C3E72]">
-                    Excel data loaded — {excelInputs.arrivalTimes.length} customers. Running the
-                    simulation will use this data instead of the fields below.
-                  </span>
-                  <button
-                    onClick={clearExcelData}
-                    className="ml-4 text-sm font-bold text-red-600 hover:text-red-800 whitespace-nowrap"
-                  >
-                    Clear & use random ✕
-                  </button>
-                </div>
-              )}
-            </div>
+
 
             <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 border border-gray-100 mb-8">
               <h2 className="text-4xl font-extrabold text-center mb-10 text-[#0C3E72] tracking-tight">
@@ -328,7 +280,6 @@ export default function MM1() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
                 {/* Left Side */}
-                {!excelInputs && (
                   <div className="lg:col-span-7 space-y-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       <div className="group">
@@ -370,10 +321,9 @@ export default function MM1() {
                       </div>
                     </div>
                   </div>
-                )}
 
                 {/* Right Side */}
-                <div className={`${excelInputs ? "lg:col-span-12" : "lg:col-span-5"} space-y-8`}>
+                <div className="lg:col-span-5 space-y-8">
                   <div className="flex items-center justify-center h-full min-h-48">
                     <div className="w-full max-w-xl">
                       <button
@@ -391,9 +341,7 @@ export default function MM1() {
                                   blur-2xl opacity-30 group-hover:opacity-70 transition-opacity"></div>
                       </button>
                       <p className="mt-4 text-center text-sm font-semibold text-[#0C3E72]">
-                        {excelInputs
-                          ? "Will run using the uploaded Excel data."
-                          : "Will run using the parameters above (randomly generated)."}
+                        Will run using the parameters above.
                       </p>
                     </div>
                   </div>
@@ -474,7 +422,7 @@ export default function MM1() {
             <div className="bg-[#0C3E72] text-white p-6">
               <h2 className="text-3xl font-bold">Results Table</h2>
               <p className="mt-2 text-sm text-white/80">
-                Source: {isExcelMode ? "Uploaded Excel Data" : "Randomly Generated"}
+                Source: Randomly Generated
               </p>
             </div>
 
@@ -484,7 +432,9 @@ export default function MM1() {
                   <tr>
                     {[
                       "Serial Number",
-                      ...(isExcelMode ? [] : ["Cp Lookup", "Cp", "Avg Time Between Arrival"]),
+                      "Cp Lookup",
+                      "Cp",
+                      "Avg Time Between Arrival",
                       "Inter Arrival",
                       "Arrival Time",
                       "Service Time",
@@ -505,13 +455,9 @@ export default function MM1() {
                   {result.table.map((r, i) => (
                     <tr key={i} className="border-b hover:bg-[#2C80D3]/10 transition text-lg">
                       <td className="py-3 px-3 font-bold text-lg text-[#0C3E72]">{r.serialNumber}</td>
-                      {!isExcelMode && (
-                        <>
-                          <td className="py-3 px-3">{r.cpLookup.toFixed(6)}</td>
-                          <td className="py-3 px-3">{r.cp.toFixed(6)}</td>
-                          <td className="py-3 px-3">{r.avgTimeBetweenArrival}</td>
-                        </>
-                      )}
+                      <td className="py-3 px-3">{r.cpLookup.toFixed(6)}</td>
+                      <td className="py-3 px-3">{r.cp.toFixed(6)}</td>
+                      <td className="py-3 px-3">{r.avgTimeBetweenArrival}</td>
                       <td className="py-3 px-3">{r.interArrival}</td>
                       <td className="py-3 px-3">{r.arrivalTime}</td>
                       <td className="py-3 px-3">{r.serviceTime}</td>
